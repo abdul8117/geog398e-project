@@ -1,6 +1,8 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import json
+import requests
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 class PollenDataAnalyzer:
     """
@@ -52,7 +54,7 @@ class PollenDataAnalyzer:
         
         if "cleaned" not in self.data_path:
           
-          df = df[df['Intensity_Value'] != '-9999']
+          df = df[df['Intensity_Value'] != '-9999'] 
           
           cols_to_drop = [
               'Update_Datetime', 'Site_ID', 'Elevation_in_Meters', 'Genus',
@@ -63,7 +65,83 @@ class PollenDataAnalyzer:
 
           df['Intensity_Value'] = df['Intensity_Value'].map(self.intensity_mapping)
 
+        df.to_csv("/Applications/Home/2025 Spring/GEOG398E/Project data/dataset-for-roi/cleaned_status_intensity_observation_data.csv") #csv 
+
         self.df = df
+
+    def pollen_only(self):
+      """
+      Filters the dataset to include only rows with reproductive phenophases.
+      """
+      reproductive_phenophases = [
+        "Flowers or flower buds",
+        "Open flowers",
+        "Pollen release",
+        "Pollen cones",
+        "Open pollen cones"
+      ]
+
+      # Check if self.df exists
+      if not hasattr(self, 'df'):
+          raise ValueError("Dataset not loaded. Please run load_and_clean_dataset() first.")
+      
+      # Filter based on Phenophase_Description
+      pollen_df = self.df[self.df['Phenophase_Description'].isin(reproductive_phenophases)].copy()
+      
+      # Optional: Save to CSV [for kathy]
+      pollen_df.to_csv("/Applications/Home/2025 Spring/GEOG398E/Project data/dataset-for-roi/pollen_only_data.csv", index=False)
+
+      # Store or return
+      self.pollen_df = pollen_df
+      print("Pollen-only dataset created with", len(pollen_df), "rows.")
+      print("original dataset has", len(self.df), "row.")
+
+    def lag_long_to_county(self):
+        """
+        Adds a 'county_fips' column to self.df based on latitude and longitude using multithreading,
+        and prints the updated DataFrame.
+        """
+        def get_fips(lat, lon):
+            try:
+                url = f'https://geo.fcc.gov/api/census/area?lat={lat}&lon={lon}&censusYear=2020&format=json'
+                r = requests.get(url, timeout=5)
+                data = r.json()
+                return data['results'][0]['county_fips'] if data['results'] else None
+            except Exception as e:
+                print(f"Error fetching FIPS for ({lat}, {lon}): {e}")
+                return None
+
+        if 'Latitude' not in self.df.columns or 'Longitude' not in self.df.columns:
+            raise ValueError("DataFrame must contain 'Latitude' and 'Longitude' columns.")
+        
+        print("Fetching county FIPS codes in parallel...")
+
+        coords = list(zip(self.df['Latitude'], self.df['Longitude']))
+        results = [None] * len(coords)
+
+        # Use ThreadPoolExecutor to parallelize API requests
+        with ThreadPoolExecutor(max_workers=20) as executor:
+            future_to_index = {
+                executor.submit(get_fips, lat, lon): i
+                for i, (lat, lon) in enumerate(coords)
+            }
+            for future in as_completed(future_to_index):
+                i = future_to_index[future]
+                try:
+                    results[i] = future.result()
+                except Exception as exc:
+                    print(f"Error at index {i}: {exc}")
+                    results[i] = None
+
+        self.df['county_fips'] = results
+
+        print(self.df)
+        #[for kathy]
+        self.df.to_csv("/Applications/Home/2025 Spring/GEOG398E/Project data/dataset-for-roi/cleaned_countyflips_status_intensity_observation_data.csv")
+
+
+      
+
 
     def plot_intensity_counts(self):
         """
