@@ -1,0 +1,22 @@
+{
+    "Less than 3": "low",
+    "3 to 10": "low",
+    "Less than 5%": "low",
+    "5-24%": "low",
+    "Little": "low",
+    "11 to 100": "high",
+    "25-49%": "low",
+    "101 to 1,000": "high",
+    "Lots": "high",
+    "1,001 to 10,000": "high",
+    "50-74%": "high",
+    "75-94%": "high",
+    "95% or more": "high",
+    "More than 1,000": "high",
+    "More than 10": "high",
+    "More than 10,000": "high",
+    "Peak flower": "high",
+    "Peak opening": "high",
+    "Peak pollen": "high",
+    "Some": "high"
+}
