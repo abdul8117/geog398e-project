@@ -2,6 +2,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import json
 import requests
+from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 class PollenDataAnalyzer:
@@ -19,7 +20,7 @@ class PollenDataAnalyzer:
     plot_monthly_observations()
         Plots total number of observations per month as a bar chart.
     """
-    def __init__(self, data_path: str, mapping_path: str, Phenophase_path:str ):
+    def __init__(self, data_path: str, mapping_path: str, Phenophase_path:str, land_cover_path: str ):
         """
         Initialize the analyzer with paths to the dataset and intensity mapping.
 
@@ -50,6 +51,7 @@ class PollenDataAnalyzer:
         self.data_path = data_path 
         self.mapping_path = mapping_path
         self.Phenophase_path = Phenophase_path
+        self.land_cover_path = land_cover_path
         self.df = None
         self.intensity_mapping = None
         self.pollen_df = None
@@ -119,57 +121,61 @@ class PollenDataAnalyzer:
       print("Original dataset has", len(self.df), "rows.")
   
     def lag_long_to_county(self):
-        """
-        Adds a 'county_fips' column to self.pollen_df based on latitude and longitude using multithreading,
-        and stores the result in self.fips_df.
-        """
-        def get_fips(lat, lon):
-            try:
-                url = f'https://geo.fcc.gov/api/census/area?lat={lat}&lon={lon}&censusYear=2020&format=json'
-                r = requests.get(url, timeout=5)
-                data = r.json()
-                return data['results'][0]['county_fips'] if data['results'] else None
-            except Exception as e:
-                print(f"Error fetching FIPS for ({lat}, {lon}): {e}")
-                return None
+      """
+      Adds a 'county_fips' column to self.pollen_df based on latitude and longitude using multithreading,
+      and stores the result in self.fips_df.
+      """
+      def get_fips(lat, lon):
+          try:
+              url = f'https://geo.fcc.gov/api/census/area?lat={lat}&lon={lon}&censusYear=2020&format=json'
+              r = requests.get(url, timeout=5)
+              data = r.json()
+              return data['results'][0]['county_fips'] if data['results'] else None
+          except Exception as e:
+              print(f"Error fetching FIPS for ({lat}, {lon}): {e}")
+              return None
 
-        if self.pollen_df is None:
-            raise ValueError("Pollen-only dataset not created. Run pollen_only() first.")
+      if self.pollen_df is None:
+          raise ValueError("Pollen-only dataset not created. Run pollen_only() first.")
+      if 'Latitude' not in self.pollen_df.columns or 'Longitude' not in self.pollen_df.columns:
+          raise ValueError("DataFrame must contain 'Latitude' and 'Longitude' columns.")
+      
+      print("Fetching county FIPS codes in parallel...")
 
-        if 'Latitude' not in self.pollen_df.columns or 'Longitude' not in self.pollen_df.columns:
-            raise ValueError("DataFrame must contain 'Latitude' and 'Longitude' columns.")
-        
-        print("Fetching county FIPS codes in parallel...")
+      coords = list(zip(self.pollen_df['Latitude'], self.pollen_df['Longitude']))
+      results = [None] * len(coords)
 
-        coords = list(zip(self.pollen_df['Latitude'], self.pollen_df['Longitude']))
-        results = [None] * len(coords)
+      with ThreadPoolExecutor(max_workers=20) as executor:
+          future_to_index = {
+              executor.submit(get_fips, lat, lon): i
+              for i, (lat, lon) in enumerate(coords)
+          }
 
-        with ThreadPoolExecutor(max_workers=20) as executor:
-            future_to_index = {
-                executor.submit(get_fips, lat, lon): i
-                for i, (lat, lon) in enumerate(coords)
-            }
-            for future in as_completed(future_to_index):
-                i = future_to_index[future]
-                try:
-                    results[i] = future.result()
-                except Exception as exc:
-                    print(f"Error at index {i}: {exc}")
-                    results[i] = None
+          # tqdm for progress bar!
+          for future in tqdm(as_completed(future_to_index), total=len(coords), desc="Progress"):
+              i = future_to_index[future]
+              try:
+                  results[i] = future.result()
+              except Exception as exc:
+                  print(f"Error at index {i}: {exc}")
+                  results[i] = None
 
-        # Make a separate DataFrame so original pollen_df remains untouched
-        self.fips_df = self.pollen_df.copy()
-        self.fips_df['county_fips'] = results
+      self.fips_df = self.pollen_df.copy()
+      self.fips_df['county_fips'] = results
 
-        print("Finished fetching county FIPS codes.")
-        print(self.fips_df)
+      #Drop all 'Unnamed' columns
+      self.fips_df = self.fips_df.loc[:, ~self.fips_df.columns.str.contains('^Unnamed')]
 
-        # Save the output for Kathy
-        self.fips_df.to_csv(
-            "/Applications/Home/2025 Spring/GEOG398E/Project data/dataset-for-roi/cleaned_countyflips_status_intensity_observation_data.csv",
-            index=False
-        )
+      print("Finished fetching county FIPS codes.")
+      print(self.fips_df)
 
+      #FOR KATHYS PATH
+      self.fips_df.to_csv(
+          "/Applications/Home/2025 Spring/GEOG398E/Project data/dataset-for-roi/cleaned_countyflips_status_intensity_observation_data.csv",
+          index=False
+      )
+
+    # def adding_land_cover
 
     def plot_intensity_counts(self):
         """
