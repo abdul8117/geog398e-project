@@ -19,7 +19,12 @@
     "Open flowers",
     "Pollen release",
     "Pollen cones",
-    "Open pollen cones"
+    "Open pollen cones",
+    "Pollen release (flowers)",
+    "Pollen cones (conifers)",
+    "Open pollen cones (conifers)",
+    "Pollen release (conifers)",
+    "Open flowers (grasses/sedges)"
   ],
   "Fruit/seed phenophases": [
     "Fruits",
@@ -29,4 +34,5 @@
     "Ripe seed cones",
     "Recent cone or seed drop"
   ]
+
 }

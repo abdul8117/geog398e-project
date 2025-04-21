@@ -19,23 +19,44 @@ class PollenDataAnalyzer:
     plot_monthly_observations()
         Plots total number of observations per month as a bar chart.
     """
-    def __init__(self, data_path: str, mapping_path: str):
+    def __init__(self, data_path: str, mapping_path: str, Phenophase_path:str ):
         """
         Initialize the analyzer with paths to the dataset and intensity mapping.
 
-        Parameters
+        Parameters 
         ----------
         data_path : str
             Path to the raw CSV file containing status and intensity observations.
         mapping_path : str
             Path to the JSON file mapping raw intensity labels to normalized categories.
+        Phenophase_path : str
+            Path to JSON file mapping Phenophases
+        df: Table
+            current table that we are manipulating 
+        intensity_mapping: Table
+            table that was 
+          
+        
+
+        pollen_df: Table
+            table that store only the Reproductive phenophases (include pollen) related data 
+
+        fips_df : Table
+            pollen_df with added 'county_fips' column based on coordinates.
+
+        load_mapping: ...?
+        load_and_clean_mapping: ...?
         """
-        self.data_path = data_path
+        self.data_path = data_path 
         self.mapping_path = mapping_path
+        self.Phenophase_path = Phenophase_path
         self.df = None
         self.intensity_mapping = None
+        self.pollen_df = None
+        self.fips_df = None
         self._load_mapping()
         self.load_and_clean_dataset()
+        
 
     def _load_mapping(self):
         """
@@ -71,35 +92,36 @@ class PollenDataAnalyzer:
 
     def pollen_only(self):
       """
-      Filters the dataset to include only rows with reproductive phenophases.
+      Filters the dataset to include only rows with reproductive phenophases
+      loaded from the JSON file provided in self.Phenophase_path.
       """
-      reproductive_phenophases = [
-        "Flowers or flower buds",
-        "Open flowers",
-        "Pollen release",
-        "Pollen cones",
-        "Open pollen cones"
-      ]
 
-      # Check if self.df exists
-      if not hasattr(self, 'df'):
+      # Check if dataset is loaded
+      if self.df is None:
           raise ValueError("Dataset not loaded. Please run load_and_clean_dataset() first.")
       
-      # Filter based on Phenophase_Description
-      pollen_df = self.df[self.df['Phenophase_Description'].isin(reproductive_phenophases)].copy()
+      # Load phenophase categories from JSON
+      with open(self.Phenophase_path, 'r') as f:
+          phenophases = json.load(f)
       
-      # Optional: Save to CSV [for kathy]
+      reproductive_phenophases = phenophases.get("Reproductive phenophases", [])
+
+      # Filter the dataframe to only reproductive phenophases
+      pollen_df = self.df[self.df['Phenophase_Description'].isin(reproductive_phenophases)].copy()
+
+      # Optional: Save to CSV for convenience
       pollen_df.to_csv("/Applications/Home/2025 Spring/GEOG398E/Project data/dataset-for-roi/pollen_only_data.csv", index=False)
 
-      # Store or return
+      # Store filtered dataframe
       self.pollen_df = pollen_df
-      print("Pollen-only dataset created with", len(pollen_df), "rows.")
-      print("original dataset has", len(self.df), "row.")
 
+      print("Pollen-only dataset created with", len(pollen_df), "rows.")
+      print("Original dataset has", len(self.df), "rows.")
+  
     def lag_long_to_county(self):
         """
-        Adds a 'county_fips' column to self.df based on latitude and longitude using multithreading,
-        and prints the updated DataFrame.
+        Adds a 'county_fips' column to self.pollen_df based on latitude and longitude using multithreading,
+        and stores the result in self.fips_df.
         """
         def get_fips(lat, lon):
             try:
@@ -111,15 +133,17 @@ class PollenDataAnalyzer:
                 print(f"Error fetching FIPS for ({lat}, {lon}): {e}")
                 return None
 
-        if 'Latitude' not in self.df.columns or 'Longitude' not in self.df.columns:
+        if self.pollen_df is None:
+            raise ValueError("Pollen-only dataset not created. Run pollen_only() first.")
+
+        if 'Latitude' not in self.pollen_df.columns or 'Longitude' not in self.pollen_df.columns:
             raise ValueError("DataFrame must contain 'Latitude' and 'Longitude' columns.")
         
         print("Fetching county FIPS codes in parallel...")
 
-        coords = list(zip(self.df['Latitude'], self.df['Longitude']))
+        coords = list(zip(self.pollen_df['Latitude'], self.pollen_df['Longitude']))
         results = [None] * len(coords)
 
-        # Use ThreadPoolExecutor to parallelize API requests
         with ThreadPoolExecutor(max_workers=20) as executor:
             future_to_index = {
                 executor.submit(get_fips, lat, lon): i
@@ -133,14 +157,18 @@ class PollenDataAnalyzer:
                     print(f"Error at index {i}: {exc}")
                     results[i] = None
 
-        self.df['county_fips'] = results
+        # Make a separate DataFrame so original pollen_df remains untouched
+        self.fips_df = self.pollen_df.copy()
+        self.fips_df['county_fips'] = results
 
-        print(self.df)
-        #[for kathy]
-        self.df.to_csv("/Applications/Home/2025 Spring/GEOG398E/Project data/dataset-for-roi/cleaned_countyflips_status_intensity_observation_data.csv")
+        print("Finished fetching county FIPS codes.")
+        print(self.fips_df)
 
-
-      
+        # Save the output for Kathy
+        self.fips_df.to_csv(
+            "/Applications/Home/2025 Spring/GEOG398E/Project data/dataset-for-roi/cleaned_countyflips_status_intensity_observation_data.csv",
+            index=False
+        )
 
 
     def plot_intensity_counts(self):
