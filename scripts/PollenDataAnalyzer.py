@@ -45,6 +45,9 @@ class PollenDataAnalyzer:
         fips_df : Table
             pollen_df with added 'county_fips' column based on coordinates.
 
+        self.final_df: Table
+            final table with the 
+
         load_mapping: ...?
         load_and_clean_mapping: ...?
         """
@@ -56,6 +59,7 @@ class PollenDataAnalyzer:
         self.intensity_mapping = None
         self.pollen_df = None
         self.fips_df = None
+        self.final_df = None
         self._load_mapping()
         self.load_and_clean_dataset()
         
@@ -175,7 +179,43 @@ class PollenDataAnalyzer:
           index=False
       )
 
-    # def adding_land_cover
+    def add_land_cover_info(self, land_cover_path: str):
+      """
+      Adds land cover info to self.fips_df by matching county_fips to GEOID in the land cover table.
+      Stores the result in self.final_df.
+
+      Parameters
+      ----------
+      land_cover_path : str
+          Path to the land cover CSV file with 'GEOID' and 'Max_LCC_Name' columns.
+      """
+      # Load Brooke's land cover table
+      land_cover_df = pd.read_csv(land_cover_path)
+
+      # Check required columns exist
+      if "GEOID" not in land_cover_df.columns or "Max_LCC_Name" not in land_cover_df.columns:
+          raise ValueError("Land cover file must contain 'GEOID' and 'Max_LCC_Name' columns.")
+
+      # Create hash table: key = county (GEOID), value = land cover type
+      land_cover_dict = {}
+      for _, row in land_cover_df.iterrows():
+          geoid = str(row["GEOID"]).zfill(5)  # ensure FIPS are 5-digit strings
+          land_cover = row["Max_LCC_Name"]
+          land_cover_dict[geoid] = land_cover
+
+      # Create a new DataFrame with land cover info added
+      self.final_df = self.fips_df.copy()
+      self.final_df["land_cover_type"] = self.final_df["county_fips"].astype(str).map(land_cover_dict)
+
+      print("Land cover types added using hash table.")
+      print(self.final_df[["county_fips", "land_cover_type"]].head())
+
+      #FOR KATHYS PATH
+      self.final_df.to_csv(
+          "/Applications/Home/2025 Spring/GEOG398E/Project data/dataset-for-roi/cleaned_data.csv",
+          index=False
+      )
+
 
     def plot_intensity_counts(self):
         """
