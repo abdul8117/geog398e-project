@@ -1,6 +1,9 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import json
+import requests
+from tqdm import tqdm
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 class PollenDataAnalyzer:
     """
@@ -17,23 +20,49 @@ class PollenDataAnalyzer:
     plot_monthly_observations()
         Plots total number of observations per month as a bar chart.
     """
-    def __init__(self, data_path: str, mapping_path: str):
+    def __init__(self, data_path: str, mapping_path: str, Phenophase_path:str, land_cover_path: str ):
         """
         Initialize the analyzer with paths to the dataset and intensity mapping.
 
-        Parameters
+        Parameters 
         ----------
         data_path : str
             Path to the raw CSV file containing status and intensity observations.
         mapping_path : str
             Path to the JSON file mapping raw intensity labels to normalized categories.
+        Phenophase_path : str
+            Path to JSON file mapping Phenophases
+        df: Table
+            current table that we are manipulating 
+        intensity_mapping: Table
+            table that was 
+          
+        
+
+        pollen_df: Table
+            table that store only the Reproductive phenophases (include pollen) related data 
+
+        fips_df : Table
+            pollen_df with added 'county_fips' column based on coordinates.
+
+        self.final_df: Table
+            final table with the 
+
+        load_mapping: ...?
+        load_and_clean_mapping: ...?
         """
-        self.data_path = data_path
+        self.data_path = data_path 
         self.mapping_path = mapping_path
+        self.Phenophase_path = Phenophase_path
+        self.land_cover_path = land_cover_path
         self.df = None
         self.intensity_mapping = None
+        self.pollen_df = None
+        self.fips_df = None
+        self.final_df = None
         self._load_mapping()
         self.load_and_clean_dataset()
+        
 
     def _load_mapping(self):
         """
@@ -52,7 +81,7 @@ class PollenDataAnalyzer:
         
         if "cleaned" not in self.data_path:
           
-          df = df[df['Intensity_Value'] != '-9999']
+          df = df[df['Intensity_Value'] != '-9999'] 
           
           cols_to_drop = [
               'Update_Datetime', 'Site_ID', 'Elevation_in_Meters', 'Genus',
@@ -63,7 +92,130 @@ class PollenDataAnalyzer:
 
           df['Intensity_Value'] = df['Intensity_Value'].map(self.intensity_mapping)
 
+        df.to_csv("/Applications/Home/2025 Spring/GEOG398E/Project data/dataset-for-roi/cleaned_status_intensity_observation_data.csv") #csv 
+
         self.df = df
+
+    def pollen_only(self):
+      """
+      Filters the dataset to include only rows with reproductive phenophases
+      loaded from the JSON file provided in self.Phenophase_path.
+      """
+
+      # Check if dataset is loaded
+      if self.df is None:
+          raise ValueError("Dataset not loaded. Please run load_and_clean_dataset() first.")
+      
+      # Load phenophase categories from JSON
+      with open(self.Phenophase_path, 'r') as f:
+          phenophases = json.load(f)
+      
+      reproductive_phenophases = phenophases.get("Reproductive phenophases", [])
+
+      # Filter the dataframe to only reproductive phenophases
+      pollen_df = self.df[self.df['Phenophase_Description'].isin(reproductive_phenophases)].copy()
+
+      # Optional: Save to CSV for convenience
+      pollen_df.to_csv("/Applications/Home/2025 Spring/GEOG398E/Project data/dataset-for-roi/pollen_only_data.csv", index=False)
+
+      # Store filtered dataframe
+      self.pollen_df = pollen_df
+
+      print("Pollen-only dataset created with", len(pollen_df), "rows.")
+      print("Original dataset has", len(self.df), "rows.")
+  
+    def lag_long_to_county(self):
+      """
+      Adds a 'county_fips' column to self.pollen_df based on latitude and longitude using multithreading,
+      and stores the result in self.fips_df.
+      """
+      def get_fips(lat, lon):
+          try:
+              url = f'https://geo.fcc.gov/api/census/area?lat={lat}&lon={lon}&censusYear=2020&format=json'
+              r = requests.get(url, timeout=5)
+              data = r.json()
+              return data['results'][0]['county_fips'] if data['results'] else None
+          except Exception as e:
+              print(f"Error fetching FIPS for ({lat}, {lon}): {e}")
+              return None
+
+      if self.pollen_df is None:
+          raise ValueError("Pollen-only dataset not created. Run pollen_only() first.")
+      if 'Latitude' not in self.pollen_df.columns or 'Longitude' not in self.pollen_df.columns:
+          raise ValueError("DataFrame must contain 'Latitude' and 'Longitude' columns.")
+      
+      print("Fetching county FIPS codes in parallel...")
+
+      coords = list(zip(self.pollen_df['Latitude'], self.pollen_df['Longitude']))
+      results = [None] * len(coords)
+
+      with ThreadPoolExecutor(max_workers=20) as executor:
+          future_to_index = {
+              executor.submit(get_fips, lat, lon): i
+              for i, (lat, lon) in enumerate(coords)
+          }
+
+          # tqdm for progress bar!
+          for future in tqdm(as_completed(future_to_index), total=len(coords), desc="Progress"):
+              i = future_to_index[future]
+              try:
+                  results[i] = future.result()
+              except Exception as exc:
+                  print(f"Error at index {i}: {exc}")
+                  results[i] = None
+
+      self.fips_df = self.pollen_df.copy()
+      self.fips_df['county_fips'] = results
+
+      #Drop all 'Unnamed' columns
+      self.fips_df = self.fips_df.loc[:, ~self.fips_df.columns.str.contains('^Unnamed')]
+
+      print("Finished fetching county FIPS codes.")
+      print(self.fips_df)
+
+      #FOR KATHYS PATH
+      self.fips_df.to_csv(
+          "/Applications/Home/2025 Spring/GEOG398E/Project data/dataset-for-roi/cleaned_countyflips_status_intensity_observation_data.csv",
+          index=False
+      )
+
+    def add_land_cover_info(self, land_cover_path: str):
+      """
+      Adds land cover info to self.fips_df by matching county_fips to GEOID in the land cover table.
+      Stores the result in self.final_df.
+
+      Parameters
+      ----------
+      land_cover_path : str
+          Path to the land cover CSV file with 'GEOID' and 'Max_LCC_Name' columns.
+      """
+      # Load Brooke's land cover table
+      land_cover_df = pd.read_csv(land_cover_path)
+
+      # Check required columns exist
+      if "GEOID" not in land_cover_df.columns or "Max_LCC_Name" not in land_cover_df.columns:
+          raise ValueError("Land cover file must contain 'GEOID' and 'Max_LCC_Name' columns.")
+
+      # Create hash table: key = county (GEOID), value = land cover type
+      land_cover_dict = {}
+      for _, row in land_cover_df.iterrows():
+          geoid = str(row["GEOID"]).zfill(5)  # ensure FIPS are 5-digit strings
+          land_cover = row["Max_LCC_Name"]
+          land_cover_dict[geoid] = land_cover
+
+      # Create a new DataFrame with land cover info added
+      self.final_df = self.fips_df.copy()
+      self.final_df["land_cover_type"] = self.final_df["county_fips"].astype(str).map(land_cover_dict)
+
+      print("Land cover types added using hash table.")
+      print(self.final_df[["county_fips", "land_cover_type"]].head())
+
+      #FOR KATHYS PATH
+      self.final_df.to_csv(
+          "/Applications/Home/2025 Spring/GEOG398E/Project data/dataset-for-roi/cleaned_data.csv",
+          index=False
+      )
+
 
     def plot_intensity_counts(self):
         """
