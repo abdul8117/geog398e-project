@@ -1,4 +1,11 @@
-# GEOG398E Project
+# GEOG398E Project: Predictive Modeling of Seasonal Pollen Exposure on the U.S. East Coast ☘️
+
+📌 **Project Overview:** 
+This project aims to build a predictive AI model that forecasts seasonal pollen intensity levels using historical weather
+land cover, and phenophase data. Our region of interest (ROI) is the Southeastern United States, focusing on states including Maryland, West Virginia, Virginia, North Carolina, South Carolina, and Georgia.
+
+🧹 **Data Cleaning Summary:** 
+Standardized time ranges and key attributes across all datasets, Removed redundant or irrelevant variables, Merged datasets based on geographic and temporal alignment, Added land cover class per county from ArcGIS, Visualized seasonal trends with matplotlib to observe correlations between phenophases and pollen release
 
 > ⚠️ **Note:** The datasets folder is not uploaded onto this repository due to GitHub's file size limit of 100 MB.
 > 
@@ -40,3 +47,4 @@ python script_name.py
 ```
 
 On macOS or Linux, use ``python3`` instead of ``python``.
+
