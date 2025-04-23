@@ -60,6 +60,7 @@ class PollenDataAnalyzer:
         self.pollen_df = None
         self.fips_df = None
         self.final_df = None
+        self.fips_cache = {}
         self._load_mapping()
         self.load_and_clean_dataset()
         
@@ -124,60 +125,66 @@ class PollenDataAnalyzer:
       print("Pollen-only dataset created with", len(pollen_df), "rows.")
       print("Original dataset has", len(self.df), "rows.")
   
-    def lag_long_to_county(self):
+    def get_fips(self, lat, lon):
       """
-      Adds a 'county_fips' column to self.pollen_df based on latitude and longitude using multithreading,
-      and stores the result in self.fips_df.
+      Fetch county FIPS code using latitude and longitude, caching results in-memory
+      to avoid redundant API calls.
       """
-      def get_fips(lat, lon):
-          try:
-              url = f'https://geo.fcc.gov/api/census/area?lat={lat}&lon={lon}&censusYear=2020&format=json'
-              r = requests.get(url, timeout=5)
-              data = r.json()
-              return data['results'][0]['county_fips'] if data['results'] else None
-          except Exception as e:
-              print(f"Error fetching FIPS for ({lat}, {lon}): {e}")
-              return None
+      key = (round(lat, 4), round(lon, 4))
 
-      if self.pollen_df is None:
-          raise ValueError("Pollen-only dataset not created. Run pollen_only() first.")
-      if 'Latitude' not in self.pollen_df.columns or 'Longitude' not in self.pollen_df.columns:
-          raise ValueError("DataFrame must contain 'Latitude' and 'Longitude' columns.")
-      
-      print("Fetching county FIPS codes in parallel...")
+      # Check if FIPS for this coordinate pair is already cached
+      if key in self.fips_cache:
+          return self.fips_cache[key]
 
-      coords = list(zip(self.pollen_df['Latitude'], self.pollen_df['Longitude']))
-      results = [None] * len(coords)
+      try:
+          url = f'https://geo.fcc.gov/api/census/area?lat={lat}&lon={lon}&censusYear=2020&format=json'
+          r = requests.get(url, timeout=5)
+          data = r.json()
+          fips = data['results'][0]['county_fips'] if data['results'] else None
 
-      with ThreadPoolExecutor(max_workers=20) as executor:
-          future_to_index = {
-              executor.submit(get_fips, lat, lon): i
-              for i, (lat, lon) in enumerate(coords)
-          }
+          # Cache the result
+          self.fips_cache[key] = fips
 
-          # tqdm for progress bar!
-          for future in tqdm(as_completed(future_to_index), total=len(coords), desc="Progress"):
-              i = future_to_index[future]
-              try:
-                  results[i] = future.result()
-              except Exception as exc:
-                  print(f"Error at index {i}: {exc}")
-                  results[i] = None
+          return fips
 
-      self.fips_df = self.pollen_df.copy()
-      self.fips_df['county_fips'] = results
+      except Exception as e:
+          print(f"Error fetching FIPS for ({lat}, {lon}): {e}")
+          return None
 
-      #Drop all 'Unnamed' columns
-      self.fips_df = self.fips_df.loc[:, ~self.fips_df.columns.str.contains('^Unnamed')]
+    def lat_long_to_county(self):
+        """
+        Adds a 'county_fips' column to self.pollen_df based on latitude and longitude
+        using hashmap caching for FIPS codes, and stores the result in self.fips_df.
+        """
+        if self.pollen_df is None:
+            raise ValueError("Pollen-only dataset not created. Run pollen_only() first.")
+        if 'Latitude' not in self.pollen_df.columns or 'Longitude' not in self.pollen_df.columns:
+            raise ValueError("DataFrame must contain 'Latitude' and 'Longitude' columns.")
 
-      print("Finished fetching county FIPS codes.")
-      print(self.fips_df)
+        print("Fetching county FIPS codes...")
 
-      #FOR KATHYS PATH
-      self.fips_df.to_csv(
-          "/Applications/Home/2025 Spring/GEOG398E/Project data/dataset-for-roi/cleaned_countyflips_status_intensity_observation_data.csv",
-          index=False
-      )
+        results = []
+
+        # Using tqdm to create a progress bar
+        for lat, lon in tqdm(zip(self.pollen_df['Latitude'], self.pollen_df['Longitude']), 
+                             total=len(self.pollen_df), desc="Fetching FIPS", ncols=100):
+            fips = self.get_fips(lat, lon)  # Get FIPS from cache or API
+            results.append(fips)
+
+        self.fips_df = self.pollen_df.copy()
+        self.fips_df['county_fips'] = results
+
+        # Drop all 'Unnamed' columns
+        self.fips_df = self.fips_df.loc[:, ~self.fips_df.columns.str.contains('^Unnamed')]
+
+        print("Finished fetching county FIPS codes.")
+        print(self.fips_df)
+
+        # Save to the provided file path
+        self.fips_df.to_csv(
+            "/Applications/Home/2025 Spring/GEOG398E/Project data/dataset-for-roi/cleaned_countyflips_status_intensity_observation_data.csv",
+            index=False
+        )
 
     def add_land_cover_info(self, land_cover_path: str):
       """
