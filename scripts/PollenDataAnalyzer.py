@@ -20,7 +20,7 @@ class PollenDataAnalyzer:
     plot_monthly_observations()
         Plots total number of observations per month as a bar chart.
     """
-    def __init__(self, data_path: str, mapping_path: str, Phenophase_path:str, land_cover_path: str ):
+    def __init__(self, data_path: str, mapping_path: str, Phenophase_path:str, land_cover_path: str, project_data_path: str):
         """
         Initialize the analyzer with paths to the dataset and intensity mapping.
 
@@ -32,6 +32,10 @@ class PollenDataAnalyzer:
             Path to the JSON file mapping raw intensity labels to normalized categories.
         Phenophase_path : str
             Path to JSON file mapping Phenophases
+        land_cover_path : str
+            Path to where our land cover data is stored for every county in our ROI
+        project_data_path : str
+            Directory where to store output dataframes
         df: Table
             current table that we are manipulating 
         intensity_mapping: Table
@@ -55,6 +59,8 @@ class PollenDataAnalyzer:
         self.mapping_path = mapping_path
         self.Phenophase_path = Phenophase_path
         self.land_cover_path = land_cover_path
+        self.project_data_path = project_data_path
+
         self.df = None
         self.intensity_mapping = None
         self.pollen_df = None
@@ -93,7 +99,7 @@ class PollenDataAnalyzer:
 
           df['Intensity_Value'] = df['Intensity_Value'].map(self.intensity_mapping)
 
-        df.to_csv("/Applications/Home/2025 Spring/GEOG398E/Project data/dataset-for-roi/cleaned_status_intensity_observation_data.csv") #csv 
+        df.to_csv(self.project_data_path + "cleaned_status_intensity_observation_data.csv") #csv 
 
         self.df = df
 
@@ -116,10 +122,8 @@ class PollenDataAnalyzer:
       # Filter the dataframe to only reproductive phenophases
       pollen_df = self.df[self.df['Phenophase_Description'].isin(reproductive_phenophases)].copy()
 
-      # Optional: Save to CSV for convenience
-      pollen_df.to_csv("/Applications/Home/2025 Spring/GEOG398E/Project data/dataset-for-roi/pollen_only_data.csv", index=False)
+      pollen_df.to_csv(self.project_data_path + "pollen_only_data.csv", index=False)
 
-      # Store filtered dataframe
       self.pollen_df = pollen_df
 
       print("Pollen-only dataset created with", len(pollen_df), "rows.")
@@ -148,7 +152,7 @@ class PollenDataAnalyzer:
           return fips
 
       except Exception as e:
-          print(f"Error fetching FIPS for ({lat}, {lon}): {e}")
+        #   print(f"Error fetching FIPS for ({lat}, {lon}): {e}")
           return None
 
     def lat_long_to_county(self):
@@ -182,11 +186,11 @@ class PollenDataAnalyzer:
 
         # Save to the provided file path
         self.fips_df.to_csv(
-            "/Applications/Home/2025 Spring/GEOG398E/Project data/dataset-for-roi/cleaned_countyflips_status_intensity_observation_data.csv",
+            self.project_data_path + "cleaned_countyflips_status_intensity_observation_data.csv",
             index=False
         )
 
-    def add_land_cover_info(self, land_cover_path: str):
+    def add_land_cover_info(self):
       """
       Adds land cover info to self.fips_df by matching county_fips to GEOID in the land cover table.
       Stores the result in self.final_df.
@@ -197,7 +201,7 @@ class PollenDataAnalyzer:
           Path to the land cover CSV file with 'GEOID' and 'Max_LCC_Name' columns.
       """
       # Load Brooke's land cover table
-      land_cover_df = pd.read_csv(land_cover_path)
+      land_cover_df = pd.read_excel(self.land_cover_path)
 
       # Check required columns exist
       if "GEOID" not in land_cover_df.columns or "Max_LCC_Name" not in land_cover_df.columns:
@@ -217,11 +221,47 @@ class PollenDataAnalyzer:
       print("Land cover types added using hash table.")
       print(self.final_df[["county_fips", "land_cover_type"]].head())
 
-      #FOR KATHYS PATH
       self.final_df.to_csv(
-          "/Applications/Home/2025 Spring/GEOG398E/Project data/dataset-for-roi/cleaned_data.csv",
+          self.project_data_path + "cleaned_data.csv",
           index=False
       )
+
+
+    def plot_intensity_by_year(self, year):
+        """
+        Plot combined, smoothed intensity counts by day for a specific year using final_df,
+        overlaid with a translucent line showing daily Tmax.
+        """
+        df = self.final_df.copy()
+        df['Observation_Date'] = pd.to_datetime(df['Observation_Date'], errors='coerce')
+        df_yr = df[df['Observation_Date'].dt.year == year]
+
+        # intensity counts
+        counts = df_yr.groupby(['Day_of_Year','Intensity_Value']).size().unstack(fill_value=0).sort_index()
+        total_counts = counts.sum(axis=1)
+        smooth_counts = total_counts.rolling(window=7, center=True, min_periods=1).mean()
+
+        # daily Tmax
+        if 'Tmax' not in df_yr.columns:
+            raise KeyError("'Tmax' column not found in final_df")
+        daily_tmax = df_yr.groupby('Day_of_Year')['Tmax'].mean().sort_index()
+        smooth_daily_tmax = daily_tmax.rolling(window=7, center=True, min_periods=1).mean()
+
+        plt.figure(figsize=(12,6))
+        # translucent line for Tmax
+        plt.plot(smooth_daily_tmax.index, smooth_daily_tmax.values, color='grey', alpha=0.4, linewidth=1, label='Tmax (°C)')
+        # smooth intensity line
+        plt.plot(smooth_counts.index, smooth_counts.values, color='red', linewidth=2, label='Observations (smoothed)')
+
+        plt.title(f'Reproductive Phenophases Observations & Tmax in {year}')
+        plt.xlabel('Day of Year')
+        plt.ylabel('Count / Tmax (°C)')
+        plt.legend()
+        plt.grid(True)
+        plt.tight_layout()
+        plt.show()
+
+
 
 
     def plot_intensity_counts(self):
@@ -229,7 +269,7 @@ class PollenDataAnalyzer:
         Plots the raw counts of high and low intensity observations for each day of the year.
         """
         
-        df = self.df.copy()
+        df = self.final_df.copy()
 
         counts = df[df['Intensity_Value'].notna()] \
             .groupby(['Day_of_Year', 'Intensity_Value']) \
@@ -256,7 +296,7 @@ class PollenDataAnalyzer:
         Plots the proportion of high and low intensity observations for each day of the year.
         """
 
-        df = self.df.copy()
+        df = self.final_df.copy()
 
         daily = df[df['Intensity_Value'].notna()] \
             .groupby(['Day_of_Year', 'Intensity_Value']) \
@@ -285,7 +325,7 @@ class PollenDataAnalyzer:
       Plots the total number of observations for each month as a bar chart.
       """
 
-      df = self.df.copy()
+      df = self.final_df.copy()
 
       df['Observation_Date'] = pd.to_datetime(df['Observation_Date'], errors='coerce')
       df = df.dropna(subset=['Observation_Date'])
@@ -308,7 +348,7 @@ class PollenDataAnalyzer:
         Plots counts of fresh pollen cones by day of year.
         Handles descriptions like 'Pollen cones (conifers)'.
         """
-        df = self.df
+        df = self.final_df
         if 'Phenophase_Description' in df.columns:
             mask = df['Phenophase_Description'].str.contains(r"^Pollen cones", na=False)
             df_pc = df[mask]
@@ -324,45 +364,3 @@ class PollenDataAnalyzer:
         plt.title('Fresh Pollen Cone Counts by Day of Year')
         plt.xlabel('Day of Year'); plt.ylabel('Count of Fresh Pollen Cones')
         plt.grid(True); plt.tight_layout(); plt.show()
-
-    def plot_open_pollen_cones(self):
-        df = self.df
-        if 'Phenophase_Description' in df.columns:
-            pc_mask = df['Phenophase_Description'].str.contains(r"^Pollen cones", na=False)
-            op_mask = df['Phenophase_Description'].str.contains(r"^Open pollen cones", na=False)
-            df_pc = df[pc_mask]
-            df_op = df[op_mask]
-        else:
-            pid_pc = self.phenophase_ids.get('pollen_cones')
-            pid_op = self.phenophase_ids.get('open_pollen_cones')
-            if pid_pc is None or pid_op is None:
-                raise KeyError("IDs missing for pollen_cones or open_pollen_cones.")
-            df_pc = df[df['Phenophase_ID'] == pid_pc]
-            df_op = df[df['Phenophase_ID'] == pid_op]
-        total = df_pc.groupby('Day_of_Year').size()
-        opened = df_op.groupby('Day_of_Year').size()
-        pct = (opened / total).fillna(0).sort_index()
-        plt.figure(figsize=(12,6))
-        plt.plot(pct.index, pct.values, marker='s', color='orange')
-        plt.title('Proportion of Open Pollen Cones by Day of Year')
-        plt.xlabel('Day of Year'); plt.ylabel('Proportion Open')
-        plt.ylim(0,1); plt.grid(True); plt.tight_layout(); plt.show()
-
-    def plot_pollen_release_intensity(self):
-        df = self.df
-        if 'Phenophase_Description' in df.columns:
-            mask = df['Phenophase_Description'].str.contains(r"^Pollen release", na=False)
-            df_pr = df[mask]
-        else:
-            pid = self.phenophase_ids.get('pollen_release')
-            if pid is None:
-                raise KeyError("ID missing for 'pollen_release'.")
-            df_pr = df[df['Phenophase_ID'] == pid]
-        counts = df_pr.groupby(['Day_of_Year','Intensity_Value']).size().unstack(fill_value=0).sort_index()
-        plt.figure(figsize=(12,6))
-        for level, style in [('Little','-.'), ('Some','--'), ('Lots','-')]:
-            if level in counts.columns:
-                plt.plot(counts.index, counts[level], linestyle=style, label=level)
-        plt.title('Pollen Release Intensity by Day of Year')
-        plt.xlabel('Day of Year'); plt.ylabel('Number of Observations')
-        plt.legend(); plt.grid(True); plt.tight_layout(); plt.show()
