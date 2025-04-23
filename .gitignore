@@ -1,3 +1,5 @@
 venv
 
 datasets/*
+
+scripts/__pycache__
