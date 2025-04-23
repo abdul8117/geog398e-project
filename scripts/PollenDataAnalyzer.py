@@ -130,6 +130,17 @@ class PollenDataAnalyzer:
       and stores the result in self.fips_df.
       """
       def get_fips(lat, lon):
+          #make this an hash map ???!!
+          #store the  lat and long in an hash map with their coresponding county flip id in an hashmap
+          #first check if the hashmap have such data and if it does then give the same flip id
+          #if hashmap not found then try to added it from the api fetching with try block and added to hash map
+          #after correctly fetched. 
+
+
+          #and maybe not addd the thread cause there might be data races?? or would it cause data races
+          #maybe adding thread is fine but after certain try it might be diminishing returns. 
+
+
           try:
               url = f'https://geo.fcc.gov/api/census/area?lat={lat}&lon={lon}&censusYear=2020&format=json'
               r = requests.get(url, timeout=5)
