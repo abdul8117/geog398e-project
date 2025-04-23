@@ -34,9 +34,4 @@ pip install -r requirements.txt
 On macOS or Linux, use ``pip3`` instead of ``pip``.
 
 # Running the Code
-To run any Python script in the terminal, use:
-```bash
-python script_name.py
-```
-
-On macOS or Linux, use ``python3`` instead of ``python``.
+Use the Jupyter Notebook (the .ipynb file) to initialise the PollenDataAnalyzer class and invoke methods defined in that class.
