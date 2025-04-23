@@ -99,8 +99,7 @@ class PollenDataAnalyzer:
 
           df['Intensity_Value'] = df['Intensity_Value'].map(self.intensity_mapping)
 
-        df.to_csv(self.project_data_path + "cleaned_status_intensity_observation_data.csv") #csv 
-
+        df.to_csv(os.path.join(self.project_data_path, "cleaned_status_intensity_observation_data.csv")) #csv 
         self.df = df
 
     def pollen_only(self):
