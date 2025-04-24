@@ -229,7 +229,7 @@ class PollenDataAnalyzer:
     def plot_intensity_by_year(self, year):
         """
         Plot combined, smoothed intensity counts by day for a specific year using final_df,
-        overlaid with a translucent line showing daily Tmax.
+        overlaid with a grey line showing daily Tmax.
         """
         df = self.final_df.copy()
         df['Observation_Date'] = pd.to_datetime(df['Observation_Date'], errors='coerce')
@@ -243,12 +243,21 @@ class PollenDataAnalyzer:
         # daily Tmax
         if 'Tmax' not in df_yr.columns:
             raise KeyError("'Tmax' column not found in final_df")
+        
         daily_tmax = df_yr.groupby('Day_of_Year')['Tmax'].mean().sort_index()
         smooth_daily_tmax = daily_tmax.rolling(window=7, center=True, min_periods=1).mean()
 
+        daily_tmin = df_yr.groupby('Day_of_Year')['Tmin'].mean().sort_index()
+        smooth_daily_tmin = daily_tmin.rolling(window=7, center=True, min_periods=1).mean()
+
         plt.figure(figsize=(12,6))
-        # translucent line for Tmax
+
+        # grey line for Tmax
         plt.plot(smooth_daily_tmax.index, smooth_daily_tmax.values, color='grey', alpha=0.4, linewidth=1, label='Tmax (°C)')
+        
+        # line for tmin
+        plt.plot(smooth_daily_tmin.index, smooth_daily_tmin.values, color='brown', alpha=0.4, linewidth=1, label='Tmin (°C)')
+
         # smooth intensity line
         plt.plot(smooth_counts.index, smooth_counts.values, color='red', linewidth=2, label='Observations (smoothed)')
 
