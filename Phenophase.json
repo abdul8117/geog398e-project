@@ -1,5 +1,5 @@
 {
-  "Vegetative phenophases": [
+  "Vegetative": [
     "Initial growth",
     "Breaking leaf buds",
     "Young leaves",
@@ -14,8 +14,9 @@
     "Colored needles",
     "Falling needles"
   ],
-  "Reproductive phenophases": [
+  "Reproductive": [
     "Flowers or flower buds",
+    "Flowers",
     "Open flowers",
     "Pollen release",
     "Pollen cones",
@@ -26,7 +27,7 @@
     "Pollen release (conifers)",
     "Open flowers (grasses/sedges)"
   ],
-  "Fruit/seed phenophases": [
+  "Fruit/seed": [
     "Fruits",
     "Ripe fruits",
     "Recent fruit or seed drop",
@@ -34,5 +35,4 @@
     "Ripe seed cones",
     "Recent cone or seed drop"
   ]
-
 }

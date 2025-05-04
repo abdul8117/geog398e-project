@@ -2,6 +2,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import json
 import requests
+import numpy as np
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -88,19 +89,49 @@ class PollenDataAnalyzer:
         
         if "cleaned" not in self.data_path:
           
-          df = df[df['Intensity_Value'] != '-9999'] 
+        #   df = df[df['Intensity_Value'] != '-9999'] 
           
           cols_to_drop = [
-              'Update_Datetime', 'Site_ID', 'Elevation_in_Meters', 'Genus',
+              'Update_Datetime', 'State', 'Plant_Nickname', 'Phenophase_Description', 'ObservedBy_Person_ID', 'Intensity_Value', 'Site_ID', 'Elevation_in_Meters', 'Genus',
               'Species', 'Common_Name', 'Kingdom', 'Phenophase_Status', 'Abundance_Value'
           ]
 
           df = df.drop(columns=[c for c in cols_to_drop if c in df.columns])
 
-          df['Intensity_Value'] = df['Intensity_Value'].map(self.intensity_mapping)
+        #   df['Intensity_Value'] = df['Intensity_Value'].map(self.intensity_mapping)
 
         df.to_csv(self.project_data_path + "cleaned_status_intensity_observation_data.csv") #csv 
 
+        self.df = df
+
+    def map_phenophase_categories(self):
+        # Make a copy of the DataFrame to avoid SettingWithCopyWarning
+        df = self.df.copy()
+
+        with open(self.Phenophase_path, 'r') as f:
+            phenophases = json.load(f)
+        
+        # Create mapping conditions
+        conditions = [
+            df["Phenophase_Name"].isin(phenophases["Vegetative"]),
+            df["Phenophase_Name"].isin(phenophases["Reproductive"]),
+            df["Phenophase_Name"].isin(phenophases["Fruit/seed"])
+        ]
+        
+        choices = ["Vegetative", "Reproductive", "Fruit/seed"]
+        
+        # Apply the mapping - much faster than iterrows()
+        df["Phenophase_Category"] = np.select(conditions, choices, default=df["Phenophase_Category"])
+        
+        # Save to CSV (optional)
+        df.to_csv(self.project_data_path + "mapped_phenophases.csv", index=False)
+
+        categories = ["Reproductive", "Vegetation", "Fruits/seed"]
+
+        rows_to_drop = df[~df["Phenophase_Category"].isin(categories)].index
+        df = df.drop(rows_to_drop)
+        
+        # Update the instance's DataFrame
         self.df = df
 
     def pollen_only(self):
@@ -160,9 +191,12 @@ class PollenDataAnalyzer:
         Adds a 'county_fips' column to self.pollen_df based on latitude and longitude
         using hashmap caching for FIPS codes, and stores the result in self.fips_df.
         """
-        if self.pollen_df is None:
+    
+        df = self.df.copy()
+
+        if df is None:
             raise ValueError("Pollen-only dataset not created. Run pollen_only() first.")
-        if 'Latitude' not in self.pollen_df.columns or 'Longitude' not in self.pollen_df.columns:
+        if 'Latitude' not in df.columns or 'Longitude' not in df.columns:
             raise ValueError("DataFrame must contain 'Latitude' and 'Longitude' columns.")
 
         print("Fetching county FIPS codes...")
@@ -170,22 +204,21 @@ class PollenDataAnalyzer:
         results = []
 
         # Using tqdm to create a progress bar
-        for lat, lon in tqdm(zip(self.pollen_df['Latitude'], self.pollen_df['Longitude']), 
-                             total=len(self.pollen_df), desc="Fetching FIPS", ncols=100):
+        for lat, lon in tqdm(zip(df['Latitude'], df['Longitude']), 
+                             total=len(df), desc="Fetching FIPS", ncols=100):
             fips = self.get_fips(lat, lon)  # Get FIPS from cache or API
             results.append(fips)
 
-        self.fips_df = self.pollen_df.copy()
-        self.fips_df['county_fips'] = results
+        self.df['county_fips'] = results
 
         # Drop all 'Unnamed' columns
-        self.fips_df = self.fips_df.loc[:, ~self.fips_df.columns.str.contains('^Unnamed')]
+        self.df = self.df.loc[:, ~self.df.columns.str.contains('^Unnamed')]
 
         print("Finished fetching county FIPS codes.")
-        print(self.fips_df)
+        print(self.df)
 
         # Save to the provided file path
-        self.fips_df.to_csv(
+        self.df.to_csv(
             self.project_data_path + "cleaned_countyflips_status_intensity_observation_data.csv",
             index=False
         )
@@ -215,17 +248,18 @@ class PollenDataAnalyzer:
           land_cover_dict[geoid] = land_cover
 
       # Create a new DataFrame with land cover info added
-      self.final_df = self.fips_df.copy()
-      self.final_df["land_cover_type"] = self.final_df["county_fips"].astype(str).map(land_cover_dict)
+      df = self.df.copy()
+      df["land_cover_type"] = df["county_fips"].astype(str).map(land_cover_dict)
 
       print("Land cover types added using hash table.")
-      print(self.final_df[["county_fips", "land_cover_type"]].head())
+      print(df[["county_fips", "land_cover_type"]].head())
 
-      self.final_df.to_csv(
+      df.to_csv(
           self.project_data_path + "cleaned_data.csv",
           index=False
       )
 
+      self.df = df
 
     def plot_intensity_by_year(self, year):
         """
@@ -269,9 +303,6 @@ class PollenDataAnalyzer:
         plt.grid(True)
         plt.tight_layout()
         plt.show()
-
-
-
 
     def plot_intensity_counts(self):
         """
