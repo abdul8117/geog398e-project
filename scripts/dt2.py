@@ -20,15 +20,29 @@ dummies = pd.concat([land_cover_dummies, phenophase_dummies], axis=1)
 
 # Define features (X) and target (y)
 X_train = pd.concat([
-    df_train[['AGDD', 'Daylength', 'Prcp', 'Tmax', 'Tmin', 'Year', 'Month', 'Day', 'Accum_Prcp']],
+    df_train[['AGDD', 'Daylength', 'Prcp', 'Tmax', 'Tmin', 'Year', 'Month', 'Day', 'Accum_Prcp', 'Species_ID', ]],
     dummies.loc[df_train.index]
 
 ], axis=1)
 
 X_test = pd.concat([
-    df_gt[['AGDD', 'Daylength', 'Prcp', 'Tmax', 'Tmin', 'Year', 'Month', 'Day', 'Accum_Prcp']],
+    df_gt[['AGDD', 'Daylength', 'Prcp', 'Tmax', 'Tmin', 'Year', 'Month', 'Day', 'Accum_Prcp', 'Species_ID', ]],
     dummies.loc[df_gt.index]
 ], axis=1)
+
+# ALL CATEGORY
+# 'Observation_ID', 'Species_ID', 'Phenophase_ID', 'Phenophase_Category',
+#        'Phenophase_Description', 'Phenophase_Definition_ID',
+#        'Observation_Date', 'Day_of_Year', 'Intensity_Category_ID',
+#        'Intensity_Value', 'Site_Visit_ID', 'AGDD', 'Tmax', 'Tmin', 'Prcp',
+#        'Accum_Prcp', 'Daylength', 'county_fips', 'land_cover_type'],
+
+# USED
+# 'Observation_ID', 'Species_ID', 'Phenophase_ID', 'Phenophase_Category',
+#   'Phenophase_Definition_ID',
+#   'Day_of_Year', 
+#     'Site_Visit_ID',  'Daylength', 'county_fips', '],
+#'Intensity_Category_ID' (CAN'T USE THIS, other wise it will just figure it out),
 
 y_train = df_train['Intensity_Value']
 y_test = df_gt['Intensity_Value']
