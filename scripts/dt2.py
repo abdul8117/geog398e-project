@@ -12,23 +12,29 @@ df_gt = df[df['Observation_Date'].str.contains('2020|2020|2022|2023')]
 
 # One-hot encode 'land_cover_type'
 land_cover_dummies = pd.get_dummies(df['land_cover_type'], prefix='land_cover')
+phenophase_dummies = pd.get_dummies(df['Phenophase_Description'], prefix='phenophase')
+
+# Combine all dummy variables into a single dataframe
+dummies = pd.concat([land_cover_dummies, phenophase_dummies], axis=1)
+
 
 # Define features (X) and target (y)
 X_train = pd.concat([
-    df_train[['AGDD', 'Daylength', 'Prcp', 'Tmax', 'Tmin']],
-    land_cover_dummies.loc[df_train.index]
+    df_train[['AGDD', 'Daylength', 'Prcp', 'Tmax', 'Tmin', 'Year', 'Month', 'Day', 'Accum_Prcp']],
+    dummies.loc[df_train.index]
+
 ], axis=1)
 
 X_test = pd.concat([
-    df_gt[['AGDD', 'Daylength', 'Prcp', 'Tmax', 'Tmin']],
-    land_cover_dummies.loc[df_gt.index]
+    df_gt[['AGDD', 'Daylength', 'Prcp', 'Tmax', 'Tmin', 'Year', 'Month', 'Day', 'Accum_Prcp']],
+    dummies.loc[df_gt.index]
 ], axis=1)
 
-y_train = df_train['Phenophase_Category']
-y_test = df_gt['Phenophase_Category']
+y_train = df_train['Intensity_Value']
+y_test = df_gt['Intensity_Value']
 
 # Train Decision Tree
-myDT = tree.DecisionTreeClassifier(criterion='entropy', max_depth=2)
+myDT = tree.DecisionTreeClassifier(criterion='entropy', max_depth=10)
 myDT.fit(X_train, y_train)
 
 # Evaluate
