@@ -5,6 +5,7 @@ import requests
 import numpy as np
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import os
 
 class PollenDataAnalyzer:
     """
@@ -89,49 +90,50 @@ class PollenDataAnalyzer:
         
         if "cleaned" not in self.data_path:
           
-        #   df = df[df['Intensity_Value'] != '-9999'] 
+          # df = df[df['Intensity_Value'].astype(str) != '-9999']
           
           cols_to_drop = [
-              'Update_Datetime', 'State', 'Plant_Nickname', 'Phenophase_Description', 'ObservedBy_Person_ID', 'Intensity_Value', 'Site_ID', 'Elevation_in_Meters', 'Genus',
+              'Update_Datetime', 'State', 'Plant_Nickname', 'ObservedBy_Person_ID', 'Intensity_Value', 'Site_ID', 'Elevation_in_Meters', 'Genus',
               'Species', 'Common_Name', 'Kingdom', 'Phenophase_Status', 'Abundance_Value'
           ]
 
           df = df.drop(columns=[c for c in cols_to_drop if c in df.columns])
 
-        #   df['Intensity_Value'] = df['Intensity_Value'].map(self.intensity_mapping)
+        #something about this need to be changed
+          # df['Intensity_Value'] = df['Intensity_Value'].map(self.intensity_mapping)
 
         df.to_csv(os.path.join(self.project_data_path, "cleaned_status_intensity_observation_data.csv")) #csv 
         self.df = df
 
-    def map_phenophase_categories(self):
-        # Make a copy of the DataFrame to avoid SettingWithCopyWarning
-        df = self.df.copy()
+    # def map_phenophase_categories(self):
+    #     # Make a copy of the DataFrame to avoid SettingWithCopyWarning
+    #     df = self.df.copy()
 
-        with open(self.Phenophase_path, 'r') as f:
-            phenophases = json.load(f)
+    #     with open(self.Phenophase_path, 'r') as f:
+    #         phenophases = json.load(f)
         
-        # Create mapping conditions
-        conditions = [
-            df["Phenophase_Name"].isin(phenophases["Vegetative"]),
-            df["Phenophase_Name"].isin(phenophases["Reproductive"]),
-            df["Phenophase_Name"].isin(phenophases["Fruit/seed"])
-        ]
+    #     # Create mapping conditions
+    #     conditions = [
+    #         df["Phenophase_Name"].isin(phenophases["Vegetative"]),
+    #         df["Phenophase_Name"].isin(phenophases["Reproductive"]),
+    #         df["Phenophase_Name"].isin(phenophases["Fruit/seed"])
+    #     ]
         
-        choices = ["Vegetative", "Reproductive", "Fruit/seed"]
+    #     choices = ["Vegetative", "Reproductive", "Fruit/seed"]
         
-        # Apply the mapping - much faster than iterrows()
-        df["Phenophase_Category"] = np.select(conditions, choices, default=df["Phenophase_Category"])
+    #     # Apply the mapping - much faster than iterrows()
+    #     df["Phenophase_Category"] = np.select(conditions, choices, default=df["Phenophase_Category"])
         
-        # Save to CSV (optional)
-        df.to_csv(self.project_data_path + "mapped_phenophases.csv", index=False)
+    #     # Save to CSV (optional)
+    #     df.to_csv(self.project_data_path + "mapped_phenophases.csv", index=False)
 
-        categories = ["Reproductive", "Vegetation", "Fruits/seed"]
+    #     categories = ["Reproductive", "Vegetation", "Fruits/seed"]
 
-        rows_to_drop = df[~df["Phenophase_Category"].isin(categories)].index
-        df = df.drop(rows_to_drop)
+    #     rows_to_drop = df[~df["Phenophase_Category"].isin(categories)].index
+    #     df = df.drop(rows_to_drop)
         
-        # Update the instance's DataFrame
-        self.df = df
+    #     # Update the instance's DataFrame
+    #     self.df = df
 
     def pollen_only(self):
       """
@@ -204,7 +206,7 @@ class PollenDataAnalyzer:
 
         # Using tqdm to create a progress bar
         for lat, lon in tqdm(zip(df['Latitude'], df['Longitude']), 
-                             total=len(df), desc="Fetching FIPS", ncols=100):
+                            total=len(df), desc="Fetching FIPS", ncols=100):
             fips = self.get_fips(lat, lon)  # Get FIPS from cache or API
             results.append(fips)
 
@@ -222,43 +224,45 @@ class PollenDataAnalyzer:
             index=False
         )
 
+
     def add_land_cover_info(self):
-      """
-      Adds land cover info to self.fips_df by matching county_fips to GEOID in the land cover table.
-      Stores the result in self.final_df.
+        """
+        Adds land cover info to self.fips_df by matching county_fips to GEOID in the land cover table.
+        Stores the result in self.df.
 
-      Parameters
-      ----------
-      land_cover_path : str
-          Path to the land cover CSV file with 'GEOID' and 'Max_LCC_Name' columns.
-      """
-      # Load Brooke's land cover table
-      land_cover_df = pd.read_excel(self.land_cover_path)
+        The land cover file can be a CSV or Excel file.
+        """
+        # Determine file extension and load accordingly
+        if self.land_cover_path.endswith('.csv'):
+            land_cover_df = pd.read_csv(self.land_cover_path)
+        elif self.land_cover_path.endswith(('.xlsx', '.xls')):
+            land_cover_df = pd.read_excel(self.land_cover_path)
+        else:
+            raise ValueError("Unsupported land cover file format. Please use .csv or .xlsx/.xls")
 
-      # Check required columns exist
-      if "GEOID" not in land_cover_df.columns or "Max_LCC_Name" not in land_cover_df.columns:
-          raise ValueError("Land cover file must contain 'GEOID' and 'Max_LCC_Name' columns.")
+        # Check required columns
+        if "GEOID" not in land_cover_df.columns or "Max_LCC_Name" not in land_cover_df.columns:
+            raise ValueError("Land cover file must contain 'GEOID' and 'Max_LCC_Name' columns.")
 
-      # Create hash table: key = county (GEOID), value = land cover type
-      land_cover_dict = {}
-      for _, row in land_cover_df.iterrows():
-          geoid = str(row["GEOID"]).zfill(5)  # ensure FIPS are 5-digit strings
-          land_cover = row["Max_LCC_Name"]
-          land_cover_dict[geoid] = land_cover
+        # Build hash table: GEOID → land cover type
+        land_cover_dict = {
+            str(row["GEOID"]).zfill(5): row["Max_LCC_Name"]
+            for _, row in land_cover_df.iterrows()
+        }
 
-      # Create a new DataFrame with land cover info added
-      df = self.df.copy()
-      df["land_cover_type"] = df["county_fips"].astype(str).map(land_cover_dict)
+        # Add land cover info to dataframe
+        df = self.df.copy()
+        df["land_cover_type"] = df["county_fips"].astype(str).map(land_cover_dict)
 
-      print("Land cover types added using hash table.")
-      print(df[["county_fips", "land_cover_type"]].head())
+        print("Land cover types added using hash table.")
+        print(df[["county_fips", "land_cover_type"]].head())
 
-      df.to_csv(
-          self.project_data_path + "cleaned_data.csv",
-          index=False
-      )
+        # Save updated dataframe
+        output_path = os.path.join(self.project_data_path, "cleaned_data.csv")
+        df.to_csv(output_path, index=False)
 
-      self.df = df
+        self.df = df
+        self.final_df = df
 
     def plot_intensity_by_year(self, year):
         """
