@@ -30,19 +30,36 @@ X_test = pd.concat([
     dummies.loc[df_gt.index]
 ], axis=1)
 
-# ALL CATEGORY
-# 'Observation_ID', 'Species_ID', 'Phenophase_ID', 'Phenophase_Category',
-#        'Phenophase_Description', 'Phenophase_Definition_ID',
-#        'Observation_Date', 'Day_of_Year', 'Intensity_Category_ID',
-#        'Intensity_Value', 'Site_Visit_ID', 'AGDD', 'Tmax', 'Tmin', 'Prcp',
-#        'Accum_Prcp', 'Daylength', 'county_fips', 'land_cover_type'],
+# NEED TO CATEGORIZE
+# 'Species_ID', (different number id, but idk if it should be encoded some more, 301 unqiue species ID, something like  82,61, 3....etc (301 different) )
+# 'Phenophase_Description',  One-hot encode *** 
+# 'Observation_Date', *** (split it into year, month, day (maybe day is not needed))
+# 'Intensity_Value', <----- *** ----- prediciting this and it's split into 0.0-9.0 intensity 
+# 'AGDD', (what is this again?)
+# 'Tmax',     
+    # if 0 <= temp <= 35: return "Low"
+    # elif 36 <= temp <= 45: return "Medium"
+    # elif 45 < temp <= 90: return "High"
+    # return "Unknown"
+# 'Tmin', 
+    # if 0 <= temp <= 35: return "Low"
+    # elif 36 <= temp <= 45: return "Medium"
+    # elif 45 < temp <= 90: return "High"
+    # return "Unknown"
+# 'Prcp',
+# 'Accum_Prcp', (what is the differences between prcp vs accum_prcp?)
+  # def categorize_precipitation(prcp):
+  #     if 0 <= prcp <= 0.3: return "High"
+  #     elif 0.4 <= prcp <= 1: return "Medium"
+  #     elif 1.1 <= prcp <= 10: return "Low"
+  #     return "Unknown"
 
-# USED
-# 'Observation_ID', 'Species_ID', 'Phenophase_ID', 'Phenophase_Category',
-#   'Phenophase_Definition_ID',
-#   'Day_of_Year', 
-#     'Site_Visit_ID',  'Daylength', 'county_fips', '],
-#'Intensity_Category_ID' (CAN'T USE THIS, other wise it will just figure it out),
+  # def categorize_prcp_amount(prcp):
+  #     if 0 <= prcp <= 2: return "High"
+  #     elif 2 < prcp <= 4: return "Medium"
+  #     return "Low"
+# 'Daylength', 
+# 'land_cover_type' One-hot encode
 
 y_train = df_train['Intensity_Value']
 y_test = df_gt['Intensity_Value']
@@ -57,3 +74,18 @@ ypred_test = myDT.predict(X_test)
 
 print('Training accuracy:', accuracy_score(y_train, ypred_train))
 print('Test accuracy:', accuracy_score(y_test, ypred_test))
+
+
+# ALL CATEGORY
+# 'Observation_ID', 'Species_ID', 'Phenophase_ID', 'Phenophase_Category',
+#        'Phenophase_Description', 'Phenophase_Definition_ID',
+#        'Observation_Date', 'Day_of_Year', 'Intensity_Category_ID',
+#        'Intensity_Value', 'Site_Visit_ID', 'AGDD', 'Tmax', 'Tmin', 'Prcp',
+#        'Accum_Prcp', 'Daylength', 'county_fips', 'land_cover_type'],
+
+# USED
+# 'Observation_ID', 'Species_ID', 'Phenophase_ID', 'Phenophase_Category',
+#   'Phenophase_Definition_ID',
+#   'Day_of_Year', 
+#     'Site_Visit_ID',  'Daylength', 'county_fips', '],
+#'Intensity_Category_ID' (CAN'T USE THIS, other wise it will just figure it out),

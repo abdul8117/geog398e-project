@@ -165,69 +165,6 @@ class PollenDataAnalyzer:
         if use_numerical_mapping:
             print("Intensity value distribution:")
             print(df['Intensity_Value'].value_counts().sort_index())
-    # def _load_mapping(self):
-    #     """
-    #     Loads the intensity mapping JSON into memory.
-    #     """
-    #     with open(self.mapping_path, 'r') as f:
-    #         self.intensity_mapping = json.load(f)
-
-    # def load_and_clean_dataset(self):
-    #     """
-    #     Reads the raw CSV, filters out invalid values, drops unneeded columns,
-    #     and maps raw intensity labels to normalized values.
-    #     """
-        
-    #     df = pd.read_csv(self.data_path)
-        
-    #     if "cleaned" not in self.data_path:
-          
-    #       df = df[df['Intensity_Value'].astype(str) != '-9999']
-          
-    #       cols_to_drop = [
-    #           'Update_Datetime', 'State', 'Plant_Nickname', 'ObservedBy_Person_ID', 'Site_ID', 'Elevation_in_Meters', 'Genus',
-    #           'Species', 'Common_Name', 'Kingdom', 'Phenophase_Status', 'Abundance_Value'
-    #       ]
-
-    #       df = df.drop(columns=[c for c in cols_to_drop if c in df.columns])
-
-    #     #something about this need to be changed
-    #       df['Intensity_Value'] = df['Intensity_Value'].map(self.intensity_mapping)
-
-    #     df.to_csv(os.path.join(self.project_data_path, "cleaned_status_intensity_observation_data.csv")) #csv 
-    #     self.df = df
-
-    # def map_phenophase_categories(self):
-    #     # Make a copy of the DataFrame to avoid SettingWithCopyWarning
-    #     df = self.df.copy()
-
-    #     with open(self.Phenophase_path, 'r') as f:
-    #         phenophases = json.load(f)
-        
-    #     # Create mapping conditions
-    #     conditions = [
-    #         df["Phenophase_Name"].isin(phenophases["Vegetative"]),
-    #         df["Phenophase_Name"].isin(phenophases["Reproductive"]),
-    #         df["Phenophase_Name"].isin(phenophases["Fruit/seed"])
-    #     ]
-        
-    #     choices = ["Vegetative", "Reproductive", "Fruit/seed"]
-        
-    #     # Apply the mapping - much faster than iterrows()
-    #     df["Phenophase_Category"] = np.select(conditions, choices, default=df["Phenophase_Category"])
-        
-    #     # Save to CSV (optional)
-    #     df.to_csv(self.project_data_path + "mapped_phenophases.csv", index=False)
-
-    #     categories = ["Reproductive", "Vegetation", "Fruits/seed"]
-
-    #     rows_to_drop = df[~df["Phenophase_Category"].isin(categories)].index
-    #     df = df.drop(rows_to_drop)
-        
-    #     # Update the instance's DataFrame
-    #     self.df = df
-
-    
     def pollen_only(self):
         """
         Filters the dataset to include only rows with reproductive phenophases,
@@ -303,8 +240,10 @@ class PollenDataAnalyzer:
         Adds a 'county_fips' column to self.pollen_df based on latitude and longitude
         using hashmap caching for FIPS codes, and stores the result in self.fips_df.
         """
-    
-        df = self.df.copy()
+        if self.pollen_df is None:
+          raise ValueError("Pollen-only dataset not created. Run pollen_only() first.")
+
+        df = self.pollen_df.copy()  
 
         if df is None:
             raise ValueError("Pollen-only dataset not created. Run pollen_only() first.")
@@ -321,10 +260,13 @@ class PollenDataAnalyzer:
             fips = self.get_fips(lat, lon)  # Get FIPS from cache or API
             results.append(fips)
 
-        self.df['county_fips'] = results
+        df['county_fips'] = results
 
         # Drop all 'Unnamed' columns
-        self.df = self.df.loc[:, ~self.df.columns.str.contains('^Unnamed')]
+        df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
+
+        self.fips_df = df
+        self.df = df
 
         print("Finished fetching county FIPS codes.")
         print(self.df)
