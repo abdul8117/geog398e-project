@@ -84,30 +84,30 @@ class PollenDataAnalyzer:
         # Create numerical mapping (scale 1-10)
         self.numerical_mapping = {
             # Count-based categories
-            "Less than 3": 1,
-            "3 to 10": 2,
-            "11 to 100": 3,
-            "101 to 1,000": 5,
-            "1,001 to 10,000": 7,
-            "More than 10,000": 9,
-            "More than 10": 3,
-            "More than 1,000": 6,
+            "Less than 3": 0, 
+            "3 to 10": 1,
+            "11 to 100": 2,
+            "101 to 1,000": 4,
+            "1,001 to 10,000": 6,
+            "More than 10,000": 8,
+            "More than 10": 2,
+            "More than 1,000": 5,
             
             # Percentage-based categories
-            "Less than 5%": 1,
-            "5-24%": 2,
-            "25-49%": 4,
-            "50-74%": 6,
-            "75-94%": 8,
-            "95% or more": 10,
+            "Less than 5%": 0,
+            "5-24%": 1,
+            "25-49%": 3,
+            "50-74%": 5,
+            "75-94%": 7,
+            "95% or more": 9,
             
             # Qualitative categories
-            "Little": 2,
-            "Some": 4,
-            "Lots": 7,
-            "Peak flower": 9,
-            "Peak opening": 9,
-            "Peak pollen": 9
+            "Little": 1,
+            "Some": 3,
+            "Lots": 6,
+            "Peak flower": 8,
+            "Peak opening": 8,
+            "Peak pollen": 8
         }
         
         # Set the default mapping to binary
