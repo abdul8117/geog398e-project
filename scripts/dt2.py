@@ -4,6 +4,7 @@ from sklearn.metrics import accuracy_score
 from sklearn import tree
 
 #2. This is a scratch sheet for dt3!!! please look into dt3
+#change to your local path for the new data you made in notebook
 path = '/Applications/Home/2025 Spring/GEOG398E/Project data/dataset-for-roi-2/cleaned_V2.0_status_intensity_observation_data.csv'
 df = pd.read_csv(path)
 
