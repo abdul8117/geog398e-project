@@ -3,6 +3,8 @@ import numpy as np
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.metrics import accuracy_score, balanced_accuracy_score, classification_report  # Updated import
 from sklearn import tree
+
+# 3. 
 # ------ Load Data ------
 path = '/Applications/Home/2025 Spring/GEOG398E/Project data/dataset-for-roi-2/cleaned_V2.0_status_intensity_observation_data.csv'
 df = pd.read_csv(path)

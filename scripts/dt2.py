@@ -3,6 +3,7 @@ import numpy as np
 from sklearn.metrics import accuracy_score
 from sklearn import tree
 
+#2. This is a scratch sheet for dt4 and dt5!!! please look into dt4/dt5
 path = '/Applications/Home/2025 Spring/GEOG398E/Project data/dataset-for-roi-2/cleaned_V2.0_status_intensity_observation_data.csv'
 df = pd.read_csv(path)
 
@@ -21,8 +22,8 @@ df = pd.read_csv(path)
 # 2021       3256      
 # 2022       5019      
 # 2023       5738      <--- (maybe later but let's predict 2024 and 2025 first )
-# 2024       3659      <--- prediciting this
-# 2025       1705      <--- prediciting this
+# 2024       3659      <--- prediciting this (ok now we figure out that this have -9999 in the rows so we dropped everything here)
+# 2025       1705      <--- prediciting this (ok now we figure out that this have -9999 in the rows so we dropped everything here)
 # final data sets 32196 rows.
 
 # Split into training (2011-2022) and testing (2023)

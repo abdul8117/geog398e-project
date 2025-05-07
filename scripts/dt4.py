@@ -4,6 +4,7 @@ from sklearn.metrics import accuracy_score, classification_report
 from sklearn import tree
 import matplotlib.pyplot as plt
 
+# 4. this produce decision tree visualizations and importance of each category 
 # Load the dataset
 path = '/Applications/Home/2025 Spring/GEOG398E/Project data/dataset-for-roi-2/cleaned_V2.0_status_intensity_observation_data.csv'
 df = pd.read_csv(path)
