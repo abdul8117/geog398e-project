@@ -5,6 +5,8 @@ import requests
 import numpy as np
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import os
+import re #using regex match pattern for phenophase matching
 
 class PollenDataAnalyzer:
     """
@@ -71,93 +73,141 @@ class PollenDataAnalyzer:
         self._load_mapping()
         self.load_and_clean_dataset()
         
-
     def _load_mapping(self):
         """
-        Loads the intensity mapping JSON into memory.
+        Loads the intensity mapping JSON into memory and sets up both binary and numerical mappings.
         """
+        # Load the original binary mapping
         with open(self.mapping_path, 'r') as f:
-            self.intensity_mapping = json.load(f)
+            self.binary_mapping = json.load(f)
+        
+        # Create numerical mapping (scale 1-10)
+        self.numerical_mapping = {
+            # Count-based categories
+            "Less than 3": 0, 
+            "3 to 10": 1,
+            "11 to 100": 2,
+            "101 to 1,000": 4,
+            "1,001 to 10,000": 6,
+            "More than 10,000": 8,
+            "More than 10": 2,
+            "More than 1,000": 5,
+            
+            # Percentage-based categories
+            "Less than 5%": 0,
+            "5-24%": 1,
+            "25-49%": 3,
+            "50-74%": 5,
+            "75-94%": 7,
+            "95% or more": 9,
+            
+            # Qualitative categories
+            "Little": 1,
+            "Some": 3,
+            "Lots": 6,
+            "Peak flower": 8,
+            "Peak opening": 8,
+            "Peak pollen": 8
+        }
+        
+        # Set the default mapping to binary
+        self.intensity_mapping = self.binary_mapping
 
-    def load_and_clean_dataset(self):
+    def load_and_clean_dataset(self, use_numerical_mapping=True):
         """
         Reads the raw CSV, filters out invalid values, drops unneeded columns,
         and maps raw intensity labels to normalized values.
+        
+        Parameters:
+        -----------
+        use_numerical_mapping : bool, default=True
+            If True, uses a more granular numerical intensity mapping (1-10 scale)
+            If False, uses the original binary mapping (high/low)
         """
         
         df = pd.read_csv(self.data_path)
         
         if "cleaned" not in self.data_path:
-          
-        #   df = df[df['Intensity_Value'] != '-9999'] 
-          
-          cols_to_drop = [
-              'Update_Datetime', 'State', 'Plant_Nickname', 'Phenophase_Description', 'ObservedBy_Person_ID', 'Intensity_Value', 'Site_ID', 'Elevation_in_Meters', 'Genus',
-              'Species', 'Common_Name', 'Kingdom', 'Phenophase_Status', 'Abundance_Value'
-          ]
+            # Filter out invalid values
+            df = df[df['Intensity_Value'].astype(str) != '-9999']
+            
+            # Columns to drop
+            cols_to_drop = [
+                'Update_Datetime', 'State', 'Plant_Nickname', 'ObservedBy_Person_ID', 'Site_ID', 
+                'Elevation_in_Meters', 'Genus', 'Species', 'Common_Name', 'Kingdom', 
+                'Phenophase_Status', 'Abundance_Value'
+            ]
 
-          df = df.drop(columns=[c for c in cols_to_drop if c in df.columns])
+            df = df.drop(columns=[c for c in cols_to_drop if c in df.columns])
 
-        #   df['Intensity_Value'] = df['Intensity_Value'].map(self.intensity_mapping)
-
-        df.to_csv(os.path.join(self.project_data_path, "cleaned_status_intensity_observation_data.csv")) #csv 
+            # Set which mapping to use based on parameter
+            mapping_to_use = self.numerical_mapping if use_numerical_mapping else self.binary_mapping
+            
+            # Apply the selected mapping
+            df['Intensity_Value'] = df['Intensity_Value'].map(mapping_to_use)
+            #trying to dropp the empty/na intensity/it seem like it doesn't work
+            df.dropna(subset=['Intensity_Value'])
+            df = df[df['Intensity_Value'].astype(str).str.strip() != '']
+            
+            # Create a new column to store the original binary mapping for reference
+            # if use_numerical_mapping:
+            #     df['Intensity_Binary'] = df['Intensity_Value'].map(self.binary_mapping)
+            
+        # Save the cleaned data
+        output_file = "cleaned_status_intensity_observation_data.csv"
+        # if use_numerical_mapping:
+        #     output_file = "cleaned_numerical_intensity_data.csv"
+        
+        df.to_csv(os.path.join(self.project_data_path, output_file))
         self.df = df
-
-    def map_phenophase_categories(self):
-        # Make a copy of the DataFrame to avoid SettingWithCopyWarning
-        df = self.df.copy()
-
+        
+        print(f"Data cleaned with {'numerical (1-10)' if use_numerical_mapping else 'binary (high/low)'} intensity mapping.")
+        if use_numerical_mapping:
+            print("Intensity value distribution:")
+            print(df['Intensity_Value'].value_counts().sort_index())
+    def pollen_only(self):
+        """
+        Filters the dataset to include only rows with reproductive phenophases,
+        including "Open flowers (lilac)" and other variations.
+        """
+        # Check if dataset is loaded
+        if self.df is None:
+            raise ValueError("Dataset not loaded. Please run load_and_clean_dataset() first.")
+        
+        # Load phenophase categories from JSON
         with open(self.Phenophase_path, 'r') as f:
             phenophases = json.load(f)
         
-        # Create mapping conditions
-        conditions = [
-            df["Phenophase_Name"].isin(phenophases["Vegetative"]),
-            df["Phenophase_Name"].isin(phenophases["Reproductive"]),
-            df["Phenophase_Name"].isin(phenophases["Fruit/seed"])
-        ]
+        reproductive_phenophases = phenophases.get("Reproductive", [])
         
-        choices = ["Vegetative", "Reproductive", "Fruit/seed"]
+        # Create a more flexible pattern that matches the base phrases anywhere in the string
+        # This will catch "Open flowers (lilac)" and similar variations
+        patterns = []
+        for p in reproductive_phenophases:
+            # Create pattern that matches the base term regardless of what follows in parentheses
+            patterns.append(rf'{re.escape(p)}(\s*\([^)]*\))?')
         
-        # Apply the mapping - much faster than iterrows()
-        df["Phenophase_Category"] = np.select(conditions, choices, default=df["Phenophase_Category"])
+        # Combine patterns with OR operator
+        combined_pattern = '|'.join(patterns)
         
-        # Save to CSV (optional)
-        df.to_csv(self.project_data_path + "mapped_phenophases.csv", index=False)
-
-        categories = ["Reproductive", "Vegetation", "Fruits/seed"]
-
-        rows_to_drop = df[~df["Phenophase_Category"].isin(categories)].index
-        df = df.drop(rows_to_drop)
+        # Filter using str.contains instead of str.match to find the pattern anywhere in the string
+        mask = self.df['Phenophase_Description'].str.contains(combined_pattern, regex=True, na=False)
         
-        # Update the instance's DataFrame
-        self.df = df
+        # Apply the mask to filter the dataframe
+        pollen_df = self.df[mask].copy()
+        
+        # Save the filtered DataFrame to CSV
+        pollen_df.to_csv(self.project_data_path + "pollen_only_data.csv", index=False)
+        
+        # Update the pollen_df attribute
+        self.pollen_df = pollen_df
+        
+        # Print information about the resulting filtered dataset
+        print("Pollen-only dataset created with", len(pollen_df), "rows.")
+        print("Original dataset has", len(self.df), "rows.")
+        print("Unique phenophase descriptions in pollen dataset:")
+        print(pollen_df["Phenophase_Description"].unique())
 
-    def pollen_only(self):
-      """
-      Filters the dataset to include only rows with reproductive phenophases
-      loaded from the JSON file provided in self.Phenophase_path.
-      """
-
-      # Check if dataset is loaded
-      if self.df is None:
-          raise ValueError("Dataset not loaded. Please run load_and_clean_dataset() first.")
-      
-      # Load phenophase categories from JSON
-      with open(self.Phenophase_path, 'r') as f:
-          phenophases = json.load(f)
-      
-      reproductive_phenophases = phenophases.get("Reproductive phenophases", [])
-
-      # Filter the dataframe to only reproductive phenophases
-      pollen_df = self.df[self.df['Phenophase_Description'].isin(reproductive_phenophases)].copy()
-
-      pollen_df.to_csv(self.project_data_path + "pollen_only_data.csv", index=False)
-
-      self.pollen_df = pollen_df
-
-      print("Pollen-only dataset created with", len(pollen_df), "rows.")
-      print("Original dataset has", len(self.df), "rows.")
   
     def get_fips(self, lat, lon):
       """
@@ -190,8 +240,10 @@ class PollenDataAnalyzer:
         Adds a 'county_fips' column to self.pollen_df based on latitude and longitude
         using hashmap caching for FIPS codes, and stores the result in self.fips_df.
         """
-    
-        df = self.df.copy()
+        if self.pollen_df is None:
+          raise ValueError("Pollen-only dataset not created. Run pollen_only() first.")
+
+        df = self.pollen_df.copy()  
 
         if df is None:
             raise ValueError("Pollen-only dataset not created. Run pollen_only() first.")
@@ -204,14 +256,17 @@ class PollenDataAnalyzer:
 
         # Using tqdm to create a progress bar
         for lat, lon in tqdm(zip(df['Latitude'], df['Longitude']), 
-                             total=len(df), desc="Fetching FIPS", ncols=100):
+                            total=len(df), desc="Fetching FIPS", ncols=100):
             fips = self.get_fips(lat, lon)  # Get FIPS from cache or API
             results.append(fips)
 
-        self.df['county_fips'] = results
+        df['county_fips'] = results
 
         # Drop all 'Unnamed' columns
-        self.df = self.df.loc[:, ~self.df.columns.str.contains('^Unnamed')]
+        df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
+
+        self.fips_df = df
+        self.df = df
 
         print("Finished fetching county FIPS codes.")
         print(self.df)
@@ -222,43 +277,70 @@ class PollenDataAnalyzer:
             index=False
         )
 
+
     def add_land_cover_info(self):
-      """
-      Adds land cover info to self.fips_df by matching county_fips to GEOID in the land cover table.
-      Stores the result in self.final_df.
+        """
+        Adds land cover info to self.fips_df by matching county_fips to GEOID in the land cover table.
+        Stores the result in self.df.
 
-      Parameters
-      ----------
-      land_cover_path : str
-          Path to the land cover CSV file with 'GEOID' and 'Max_LCC_Name' columns.
-      """
-      # Load Brooke's land cover table
-      land_cover_df = pd.read_excel(self.land_cover_path)
+        The land cover file can be a CSV or Excel file.
+        """
+        # Determine file extension and load accordingly
+        if self.land_cover_path.endswith('.csv'):
+            land_cover_df = pd.read_csv(self.land_cover_path)
+        elif self.land_cover_path.endswith(('.xlsx', '.xls')):
+            land_cover_df = pd.read_excel(self.land_cover_path)
+        else:
+            raise ValueError("Unsupported land cover file format. Please use .csv or .xlsx/.xls")
 
-      # Check required columns exist
-      if "GEOID" not in land_cover_df.columns or "Max_LCC_Name" not in land_cover_df.columns:
-          raise ValueError("Land cover file must contain 'GEOID' and 'Max_LCC_Name' columns.")
+        # Check required columns
+        if "GEOID" not in land_cover_df.columns or "Max_LCC_Name" not in land_cover_df.columns:
+            raise ValueError("Land cover file must contain 'GEOID' and 'Max_LCC_Name' columns.")
 
-      # Create hash table: key = county (GEOID), value = land cover type
-      land_cover_dict = {}
-      for _, row in land_cover_df.iterrows():
-          geoid = str(row["GEOID"]).zfill(5)  # ensure FIPS are 5-digit strings
-          land_cover = row["Max_LCC_Name"]
-          land_cover_dict[geoid] = land_cover
+        # Build hash table: GEOID → land cover type
+        land_cover_dict = {
+            str(row["GEOID"]).zfill(5): row["Max_LCC_Name"]
+            for _, row in land_cover_df.iterrows()
+        }
 
-      # Create a new DataFrame with land cover info added
-      df = self.df.copy()
-      df["land_cover_type"] = df["county_fips"].astype(str).map(land_cover_dict)
+        # Add land cover info to dataframe
+        df = self.df.copy()
+        df["land_cover_type"] = df["county_fips"].astype(str).map(land_cover_dict)
 
-      print("Land cover types added using hash table.")
-      print(df[["county_fips", "land_cover_type"]].head())
+        print("Land cover types added using hash table.")
+        print(df[["county_fips", "land_cover_type"]].head())
 
-      df.to_csv(
-          self.project_data_path + "cleaned_data.csv",
-          index=False
-      )
+        # Save updated dataframe
+        output_path = os.path.join(self.project_data_path, "cleaned_data.csv")
+        df.to_csv(output_path, index=False)
 
-      self.df = df
+        self.df = df
+        self.final_df = df
+
+
+    def split_observation_date(self):
+        """
+        Splits 'Observation_Date' into separate 'Year', 'Month', and 'Day' columns.
+        Updates self.final_df and saves the result as 'final_df.csv'.
+        """
+        if self.final_df is None:
+            raise ValueError("final_df is not loaded. Please ensure it is initialized before calling this method.")
+
+        # Show progress bar while splitting
+        tqdm.pandas(desc="Splitting Observation_Date")
+
+        # Convert Observation_Date to datetime
+        self.final_df['Observation_Date'] = pd.to_datetime(self.final_df['Observation_Date'], errors='coerce')
+
+        # Extract year, month, day with progress bar
+        self.final_df['Year'] = self.final_df['Observation_Date'].progress_apply(lambda x: x.year if pd.notnull(x) else None)
+        self.final_df['Month'] = self.final_df['Observation_Date'].progress_apply(lambda x: x.month if pd.notnull(x) else None)
+        self.final_df['Day'] = self.final_df['Observation_Date'].progress_apply(lambda x: x.day if pd.notnull(x) else None)
+
+        # Save to CSV
+        output_path = os.path.join(self.project_data_path, "final_df.csv")
+        self.final_df.to_csv(output_path, index=False)
+        print(f"Updated final_df with Year, Month, Day columns and saved to {output_path}")
 
     def plot_intensity_by_year(self, year):
         """
@@ -403,3 +485,5 @@ class PollenDataAnalyzer:
         plt.title('Fresh Pollen Cone Counts by Day of Year')
         plt.xlabel('Day of Year'); plt.ylabel('Count of Fresh Pollen Cones')
         plt.grid(True); plt.tight_layout(); plt.show()
+
+

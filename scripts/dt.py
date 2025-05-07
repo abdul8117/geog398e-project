@@ -3,7 +3,9 @@ import numpy as np
 from sklearn.metrics import accuracy_score
 from sklearn import tree
 
-path = r'C:\Users\abdul\OneDrive\Documents\GEOG398E Project\Project data\cleaned_V2.0_status_intensity_observation_data.csv'
+#1. First Simple Decision Tree
+#change to your local path for the new data you made in notebook
+path = '/Applications/Home/2025 Spring/GEOG398E/Project data/dataset-for-roi-2/cleaned_V2.0_status_intensity_observation_data.csv'
 df = pd.read_csv(path)
 
 # Split into training (2011-2022) and testing (2023)
