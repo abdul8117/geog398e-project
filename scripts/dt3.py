@@ -4,7 +4,7 @@ from sklearn.metrics import accuracy_score, classification_report
 from sklearn import tree
 import matplotlib.pyplot as plt
 
-# 3. this use dt2's sketh and data analysis from notebook to better categorize temp, prcp, and also map phenophases alot better (have not done month yet)
+# 3. this use dt2's sketch and data analysis from notebook to better categorize temp, prcp, and also map phenophases alot better (have not done month yet)
 # this produce decision tree visualizations and importance of each category 
 # Training optimized decision tree...
 
