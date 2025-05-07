@@ -3,7 +3,7 @@ import numpy as np
 from sklearn.metrics import accuracy_score
 from sklearn import tree
 
-#2. This is a scratch sheet for dt4 and dt5!!! please look into dt4/dt5
+#2. This is a scratch sheet for dt3!!! please look into dt3
 path = '/Applications/Home/2025 Spring/GEOG398E/Project data/dataset-for-roi-2/cleaned_V2.0_status_intensity_observation_data.csv'
 df = pd.read_csv(path)
 

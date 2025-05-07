@@ -7,6 +7,10 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.preprocessing import OneHotEncoder
 
 #Brooke's RANDOM FOREST
+# Decision Tree Training Accuracy: 0.8354508391011662
+# Decision Tree Test Accuracy: 0.2514813523875915
+# Random Forest Training Accuracy: 0.7611169052811226
+# Random Forest Testing Accuracy: 0.28267689090275355
 path = '/Applications/Home/2025 Spring/GEOG398E/Project data/dataset-for-roi-2/cleaned_V2.0_status_intensity_observation_data.csv'
 df = pd.read_csv(path)
 

@@ -1,118 +1,169 @@
 import pandas as pd
 import numpy as np
-from sklearn.preprocessing import OneHotEncoder
-from sklearn.metrics import accuracy_score, balanced_accuracy_score, classification_report  # Updated import
+from sklearn.metrics import accuracy_score, classification_report
 from sklearn import tree
+import matplotlib.pyplot as plt
 
-# 3. 
-# ------ Load Data ------
+# 3. this use dt2's sketh and data analysis from notebook to better categorize temp, prcp, and also map phenophases alot better (have not done month yet)
+# this produce decision tree visualizations and importance of each category 
+# Training optimized decision tree...
+
+# Training Accuracy: 0.4117 //why is my training accuracy low?
+# Test Accuracy: 0.2605
+
+# Load the dataset
 path = '/Applications/Home/2025 Spring/GEOG398E/Project data/dataset-for-roi-2/cleaned_V2.0_status_intensity_observation_data.csv'
 df = pd.read_csv(path)
 
-# ------ Data Splitting ------
-# Convert Observation_Date to datetime and extract year
-df['Year'] = pd.to_datetime(df['Observation_Date']).dt.year
-df_train = df[(df['Year'] >= 2011) & (df['Year'] <= 2022)]
-df_gt = df[df['Year'] >= 2020]  # Test on 2020-2023 data
+# --- Add Month extraction FIRST ---
+if 'Observation_Date' in df.columns:
+    df['Year'] = pd.to_datetime(df['Observation_Date']).dt.year
+    df['Month'] = pd.to_datetime(df['Observation_Date']).dt.month
+    df['Day'] = pd.to_datetime(df['Observation_Date']).dt.day
 
-# ------ Feature Engineering ------
+# --- Add Growing_Month EARLY ---
+df['Growing_Month'] = df['Month'].apply(lambda m: 1 if 4 <= m <= 9 else 0)
+
+# Improved categorization functions
 def categorize_temperature(temp):
-    if 0 <= temp <= 35: return "Low"
-    elif 36 <= temp <= 45: return "Medium"
-    elif 45 < temp <= 90: return "High"
-    return "Unknown"
+    if temp < 5: return "Dormant"
+    elif 5 <= temp < 10: return "Chilling"
+    elif 10 <= temp < 15: return "Early_Growth"
+    elif 15 <= temp < 25: return "Optimal"
+    elif 25 <= temp < 35: return "Heat_Stress"
+    else: return "Extreme_Heat"
 
 def categorize_precipitation(prcp):
-    if 0 <= prcp <= 0.3: return "High"
-    elif 0.4 <= prcp <= 1: return "Medium"
-    elif 1.1 <= prcp <= 10: return "Low"
-    return "Unknown"
+    if prcp == 0: return "None"
+    elif 0 < prcp < 2.5: return "Light"
+    elif 2.5 <= prcp < 7.6: return "Moderate"
+    elif 7.6 <= prcp < 25.4: return "Heavy"
+    else: return "Extreme"
 
-def categorize_prcp_amount(prcp):
-    if 0 <= prcp <= 2: return "High"
-    elif 2 < prcp <= 4: return "Medium"
-    return "Low"
+def categorize_agdd(agdd):
+    if agdd < 200: return "Dormant"
+    elif 200 <= agdd < 500: return "Bud_Swell"
+    elif 500 <= agdd < 1000: return "Leaf_Out"
+    elif 1000 <= agdd < 1500: return "Flowering"
+    else: return "Fruit_Senescence"
 
-# Apply categorization to both datasets
-for df_set in [df_train, df_gt]:
-    # Create categories
-    df_set.loc[:, "Tmax_Category"] = df_set["Tmax"].apply(categorize_temperature)
-    df_set.loc[:, "Tmin_Category"] = df_set["Tmin"].apply(categorize_temperature)
-    df_set.loc[:, "Prcp_Category"] = df_set["Prcp"].apply(categorize_precipitation)
-    df_set.loc[:, "Prcp_Amount_Category"] = df_set["Prcp"].apply(categorize_prcp_amount)
-    
-    # Convert to numerical values
-    category_mapping = {"Low": 0, "Medium": 1, "High": 2, "Unknown": -1}
-    df_set.loc[:, "Tmax_Value"] = df_set["Tmax_Category"].map(category_mapping)
-    df_set.loc[:, "Tmin_Value"] = df_set["Tmin_Category"].map(category_mapping)
-    df_set.loc[:, "Prcp_Value"] = df_set["Prcp_Category"].map(category_mapping)
-    df_set.loc[:, "Prcp_Amount_Value"] = df_set["Prcp_Amount_Category"].map(category_mapping)
+def categorize_daylength(daylength):
+    hours = daylength / 3600
+    if hours < 10: return "Winter"
+    elif 10 <= hours < 12: return "Spring_Fall"
+    elif 12 <= hours < 14: return "Growing_Season"
+    else: return "Peak_Summer"
 
-# ------ One-Hot Encoding ------
-# Initialize encoders
-land_cover_encoder = OneHotEncoder(handle_unknown='ignore')
-phenophase_encoder = OneHotEncoder(handle_unknown='ignore')
+def categorize_accum_prcp(prcp):
+    if prcp < 200: return "Dry"
+    elif 200 <= prcp < 400: return "Normal"
+    elif 400 <= prcp < 600: return "Moist"
+    else: return "Saturated"
 
-# Fit on training data
-land_cover_encoder.fit(df_train[['land_cover_type']])
-phenophase_encoder.fit(df_train[['Phenophase_Description']])
+# --- THEN apply categorizations ---
+df['Tmax_Category'] = df['Tmax'].apply(categorize_temperature)
+df['Tmin_Category'] = df['Tmin'].apply(categorize_temperature)
+df['Prcp_Category'] = df['Prcp'].apply(categorize_precipitation)
+df['Accum_Prcp_Category'] = df['Accum_Prcp'].apply(categorize_accum_prcp)
+df['AGDD_Category'] = df['AGDD'].apply(categorize_agdd)
+df['Daylength_Category'] = df['Daylength'].apply(categorize_daylength)
 
-# Transform both datasets
-land_cover_train = land_cover_encoder.transform(df_train[['land_cover_type']])
-land_cover_test = land_cover_encoder.transform(df_gt[['land_cover_type']])
+# Enhanced land cover grouping
+land_cover_map = {
+    'Deciduous forest': 'Forest',
+    'Evergreen forest': 'Forest',
+    'Mixed forest': 'Forest',
+    'Developed, open space': 'Urban',
+    'Developed, low intensity': 'Urban',
+    'Cultivated crops': 'Agriculture',
+    'Woody wetlands': 'Wetlands',
+    'Pasture/hay': 'Other'
+}
+df['Land_Cover_Group'] = df['land_cover_type'].map(land_cover_map)
 
-phenophase_train = phenophase_encoder.transform(df_train[['Phenophase_Description']])
-phenophase_test = phenophase_encoder.transform(df_gt[['Phenophase_Description']])
+# Phenophase consolidation
+phenophase_map = {
+    'Flowers or flower buds': 'Bud_Development',
+    'Open flowers': 'Active_Flowering',
+    'Pollen release (flowers)': 'Pollen_Release',
+    'Pollen cones (conifers)': 'Conifer_Repro',
+    'Open pollen cones (conifers)': 'Conifer_Repro',
+    'Pollen release (conifers)': 'Conifer_Repro',
+    'Open flowers (grasses/sedges)': 'Grass_Flowering'
+}
+df['Phenophase_Group'] = df['Phenophase_Description'].map(phenophase_map)
 
-# ------ Feature Construction ------
-base_features = [
-    'AGDD', 'Daylength', 'Prcp', 'Tmax', 'Tmin', 'Year',
-    'Month', 'Day', 'Accum_Prcp', 'Species_ID',
-    'Tmax_Value', 'Tmin_Value', 'Prcp_Value', 'Prcp_Amount_Value'
+# Functional species grouping
+def categorize_species(species_id):
+    deciduous = {3, 12, 82}
+    conifers = {7, 1172}
+    if species_id in deciduous: return 'Deciduous_Tree'
+    elif species_id in conifers: return 'Conifer'
+    else: return 'Other_Plants'
+df['Species_Group'] = df['Species_ID'].apply(categorize_species)
+
+# --- Now split the data ---
+# 2011-2022 is all train
+# 2023 is testing data
+df_train = df[df['Year'] <= 2022]
+df_test = df[df['Year'] >= 2023]
+
+
+# Updated categorical features
+categorical_features = [
+    'Tmax_Category', 'Tmin_Category', 'Prcp_Category',
+    'Accum_Prcp_Category', 'AGDD_Category', 'Daylength_Category',
+    'Land_Cover_Group', 'Phenophase_Group', 'Species_Group'
 ]
 
-# Create final feature matrices
-X_train = pd.DataFrame(
-    data=np.hstack([
-        df_train[base_features].values,
-        land_cover_train.toarray(),
-        phenophase_train.toarray()
-    ]),
-    index=df_train.index
-)
+# One-hot encoding
+dummies = pd.get_dummies(df[categorical_features])
 
-X_test = pd.DataFrame(
-    data=np.hstack([
-        df_gt[base_features].values,
-        land_cover_test.toarray(),
-        phenophase_test.toarray()
-    ]),
-    index=df_gt.index
-)
+# Final feature selection
+numerical_features = ['Growing_Month']
+X_train = pd.concat([df_train[numerical_features], dummies.loc[df_train.index]], axis=1)
+X_test = pd.concat([df_test[numerical_features], dummies.loc[df_test.index]], axis=1)
 
-# ------ Target Variables ------
 y_train = df_train['Intensity_Value']
-y_test = df_gt['Intensity_Value']
+y_test = df_test['Intensity_Value']
 
-# ------ Model Training ------
+# Align columns
+X_test = X_test.reindex(columns=X_train.columns, fill_value=0)
+
+# Train decision tree
+print("Training optimized decision tree...")
 myDT = tree.DecisionTreeClassifier(
     criterion='entropy',
-    max_depth=10,
+    max_depth=12,
     min_samples_split=20,
-    min_samples_leaf=10
+    min_samples_leaf=10,
+    max_features=0.8
 )
 myDT.fit(X_train, y_train)
 
-# ------ Evaluation ------
+# Evaluation
 ypred_train = myDT.predict(X_train)
 ypred_test = myDT.predict(X_test)
 
-print('\nTraining Metrics:')
-print('Accuracy:', accuracy_score(y_train, ypred_train))
-print('Balanced Accuracy:', balanced_accuracy_score(y_train, ypred_train))
+print(f'\nTraining Accuracy: {accuracy_score(y_train, ypred_train):.4f}')
+print(f'Test Accuracy: {accuracy_score(y_test, ypred_test):.4f}')
 
-print('\nTest Metrics:')
-print('Accuracy:', accuracy_score(y_test, ypred_test))
-print('Balanced Accuracy:', balanced_accuracy_score(y_test, ypred_test))
-print('\nClassification Report:')
+print("\nDetailed Classification Report:")
 print(classification_report(y_test, ypred_test))
+
+# Feature importance
+feature_importances = pd.DataFrame({
+    'feature': X_train.columns,
+    'importance': myDT.feature_importances_
+}).sort_values('importance', ascending=False)
+
+print("\nTop Predictive Features:")
+print(feature_importances.head(15))
+
+# Visualize tree
+plt.figure(figsize=(20,12))
+class_names = [str(c) for c in sorted(y_train.unique())]
+tree.plot_tree(myDT, max_depth=3, feature_names=X_train.columns,
+               class_names=class_names, filled=True)
+plt.savefig('optimized_tree.png', dpi=300)
+print("\nTree visualization saved as optimized_tree.png")
