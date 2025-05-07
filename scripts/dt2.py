@@ -6,9 +6,29 @@ from sklearn import tree
 path = '/Applications/Home/2025 Spring/GEOG398E/Project data/dataset-for-roi-2/cleaned_V2.0_status_intensity_observation_data.csv'
 df = pd.read_csv(path)
 
+# Year       Count     
+# --------------------
+# 2011       1         
+# 2012       41        
+# 2013       851       
+# 2014       958       
+# 2015       782       
+# 2016       1717      
+# 2017       2270      
+# 2018       2287      
+# 2019       2211      
+# 2020       1701      
+# 2021       3256      
+# 2022       5019      
+# 2023       5738      <--- (maybe later but let's predict 2024 and 2025 first )
+# 2024       3659      <--- prediciting this
+# 2025       1705      <--- prediciting this
+# final data sets 32196 rows.
+
 # Split into training (2011-2022) and testing (2023)
-df_train = df[df['Observation_Date'].str.contains('2011|2012|2013|2014|2015|2016|2017|2018|2019|')]
-df_gt = df[df['Observation_Date'].str.contains('2020|2020|2022|2023')]
+df_train = df[df['Observation_Date'].str.contains('2011|2012|2013|2014|2015|2016|2017|2018|2019|')] #seems like soemthing wrong over here
+df_gt = df[df['Observation_Date'].str.contains('2020|2020|2022|2023')] #seems like soemthing wrong over here
+
 
 # One-hot encode 'land_cover_type'
 land_cover_dummies = pd.get_dummies(df['land_cover_type'], prefix='land_cover')
@@ -35,13 +55,39 @@ X_test = pd.concat([
 # 'Phenophase_Description',  One-hot encode *** 
 # 'Observation_Date', *** (split it into year, month, day (maybe day is not needed))
 # 'Intensity_Value', <----- *** ----- prediciting this and it's split into 0.0-9.0 intensity 
+        #     # Count-based categories
+        #     "Less than 3": 0, 
+        #     "3 to 10": 1,
+        #     "11 to 100": 2,
+        #     "101 to 1,000": 4,
+        #     "1,001 to 10,000": 6,
+        #     "More than 10,000": 8,
+        #     "More than 10": 2,
+        #     "More than 1,000": 5,
+            
+        #     # Percentage-based categories
+        #     "Less than 5%": 0,
+        #     "5-24%": 1,
+        #     "25-49%": 3,
+        #     "50-74%": 5,
+        #     "75-94%": 7,
+        #     "95% or more": 9,
+            
+        #     # Qualitative categories
+        #     "Little": 1,
+        #     "Some": 3,
+        #     "Lots": 6,
+        #     "Peak flower": 8,
+        #     "Peak opening": 8,
+        #     "Peak pollen": 8
+        # }
 # 'AGDD', (what is this again?)
 # 'Tmax',     
     # if 0 <= temp <= 35: return "Low"
     # elif 36 <= temp <= 45: return "Medium"
     # elif 45 < temp <= 90: return "High"
     # return "Unknown"
-# 'Tmin', 
+# 'Tmin',  (maybe something about negative tempeatures)
     # if 0 <= temp <= 35: return "Low"
     # elif 36 <= temp <= 45: return "Medium"
     # elif 45 < temp <= 90: return "High"
