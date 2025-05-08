@@ -22,7 +22,7 @@ df = pd.read_csv(path)
 # 2020       1701      
 # 2021       3256      
 # 2022       5019      
-# 2023       5738      <--- (maybe later but let's predict 2024 and 2025 first )
+# 2023       5738      <--- (predicting 2023 only)
 # 2024       3659      <--- prediciting this (ok now we figure out that this have -9999 in the rows so we dropped everything here)
 # 2025       1705      <--- prediciting this (ok now we figure out that this have -9999 in the rows so we dropped everything here)
 # final data sets 32196 rows.
