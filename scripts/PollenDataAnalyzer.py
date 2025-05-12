@@ -347,7 +347,7 @@ class PollenDataAnalyzer:
         Plot combined, smoothed intensity counts by day for a specific year using final_df,
         overlaid with a grey line showing daily Tmax.
         """
-        df = self.final_df.copy()
+        df = self.df.copy()
         df['Observation_Date'] = pd.to_datetime(df['Observation_Date'], errors='coerce')
         df_yr = df[df['Observation_Date'].dt.year == year]
 
@@ -390,7 +390,7 @@ class PollenDataAnalyzer:
         Plots the raw counts of high and low intensity observations for each day of the year.
         """
         
-        df = self.final_df.copy()
+        df = self.df.copy()
 
         counts = df[df['Intensity_Value'].notna()] \
             .groupby(['Day_of_Year', 'Intensity_Value']) \
@@ -417,7 +417,7 @@ class PollenDataAnalyzer:
         Plots the proportion of high and low intensity observations for each day of the year.
         """
 
-        df = self.final_df.copy()
+        df = self.df.copy()
 
         daily = df[df['Intensity_Value'].notna()] \
             .groupby(['Day_of_Year', 'Intensity_Value']) \
@@ -445,8 +445,7 @@ class PollenDataAnalyzer:
       """
       Plots the total number of observations for each month as a bar chart.
       """
-
-      df = self.final_df.copy()
+      df = self.df.copy()
 
       df['Observation_Date'] = pd.to_datetime(df['Observation_Date'], errors='coerce')
       df = df.dropna(subset=['Observation_Date'])
@@ -469,7 +468,7 @@ class PollenDataAnalyzer:
         Plots counts of fresh pollen cones by day of year.
         Handles descriptions like 'Pollen cones (conifers)'.
         """
-        df = self.final_df
+        df = self.df.copy()
         if 'Phenophase_Description' in df.columns:
             mask = df['Phenophase_Description'].str.contains(r"^Pollen cones", na=False)
             df_pc = df[mask]
