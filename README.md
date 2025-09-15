@@ -3,6 +3,7 @@
 📌 **Project Overview:** 
 This project aims to build a predictive AI model that forecasts seasonal pollen intensity levels using historical weather
 land cover, and phenophase data. Our region of interest (ROI) is the Southeastern United States, focusing on states including Maryland, West Virginia, Virginia, North Carolina, South Carolina, and Georgia.
+[Predicting Pollen Intensity Presentation](https://docs.google.com/presentation/d/1hOB4tsx16dfcSqVQVYcOlqLWLBnGB4KPFQl_HbGx6FA/edit?slide=id.g3575963a095_2_1088#slide=id.g3575963a095_2_1088)
 
 🧹 **Data Cleaning Summary:** 
 Standardized time ranges and key attributes across all datasets, Removed redundant or irrelevant variables, Merged datasets based on geographic and temporal alignment, Added land cover class per county from ArcGIS, Visualized seasonal trends with matplotlib to observe correlations between phenophases and pollen release
